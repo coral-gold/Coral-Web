@@ -1,0 +1,96 @@
+backend:
+  name: git-gateway
+  # Change this if your production/deploy branch is not "main".
+  branch: main
+
+# Shown as a friendly heading inside the admin panel.
+site_url: https://coralgold.example
+display_url: https://coralgold.example
+logo_url: ../assets/logo.png
+
+media_folder: "assets/uploads"
+public_folder: "/assets/uploads"
+
+collections:
+  - name: "products"
+    label: "Catalog Products"
+    label_singular: "Product"
+    folder: "content/products"
+    create: true
+    delete: true
+    slug: "{{slug}}"
+    format: "json"
+    summary: "{{title}} — {{category}}"
+    fields:
+      - { label: "Product Name", name: "title", widget: "string" }
+      - { label: "Category", name: "category", widget: "string", hint: "e.g. Necklaces, Pendants, Bracelets, Watches, Rings, Earrings, Bangles. Keep spelling consistent with existing categories so catalog filters group correctly." }
+      - { label: "Photo", name: "image", widget: "image", media_folder: "/assets/products", public_folder: "assets/products" }
+      - { label: "Short Description", name: "description", widget: "text" }
+      - { label: "Feature on Home Page", name: "featured", widget: "boolean", default: false, hint: "Featured products appear in the curated picks on the Home page." }
+      - { label: "Display Order", name: "order", widget: "number", default: 10, hint: "Lower numbers appear first in the catalog." }
+
+  - name: "pages"
+    label: "Site Pages"
+    editor:
+      preview: false
+    files:
+      - name: "home"
+        label: "Home Page"
+        file: "content/pages/home.json"
+        fields:
+          - { label: "Hero Eyebrow (small line above heading)", name: "hero_eyebrow", widget: "string" }
+          - { label: "Hero Heading", name: "hero_heading", widget: "string" }
+          - { label: "Hero Subtext", name: "hero_subtext", widget: "text" }
+          - { label: "Hero Badge Number", name: "hero_badge_number", widget: "string" }
+          - { label: "Hero Badge Label", name: "hero_badge_label", widget: "string" }
+          - { label: "Primary Button Label", name: "cta_primary_label", widget: "string" }
+          - { label: "Secondary Button Label", name: "cta_secondary_label", widget: "string" }
+
+      - name: "about"
+        label: "About Us Page"
+        file: "content/pages/about.json"
+        fields:
+          - { label: "Hero Eyebrow", name: "hero_eyebrow", widget: "string" }
+          - { label: "Hero Heading", name: "hero_heading", widget: "string" }
+          - { label: "Brand Story", name: "story", widget: "text" }
+          - { label: "Mission Statement (draft)", name: "mission_draft", widget: "text" }
+          - { label: "Vision Statement (draft)", name: "vision_draft", widget: "text" }
+          - label: "Manufacturing / Facility Highlights"
+            name: "facility_highlights"
+            widget: "list"
+            field: { label: "Point", name: "item", widget: "string" }
+          - label: "Stats"
+            name: "stats"
+            widget: "list"
+            fields:
+              - { label: "Number (e.g. 5+, 100%, or CZ)", name: "number", widget: "string" }
+              - { label: "Label", name: "label", widget: "string" }
+
+      - name: "wholesale"
+        label: "Wholesale Page"
+        file: "content/pages/wholesale.json"
+        fields:
+          - { label: "Hero Eyebrow", name: "hero_eyebrow", widget: "string" }
+          - { label: "Hero Heading", name: "hero_heading", widget: "string" }
+          - { label: "Intro Paragraph", name: "intro", widget: "text" }
+          - label: "Sections"
+            name: "sections"
+            widget: "list"
+            fields:
+              - { label: "Heading", name: "heading", widget: "string" }
+              - { label: "Body", name: "body", widget: "text" }
+          - { label: "Call-to-Action Button Label", name: "cta_label", widget: "string" }
+
+      - name: "contact"
+        label: "Contact Page"
+        file: "content/pages/contact.json"
+        fields:
+          - { label: "Address", name: "address_line", widget: "text" }
+          - { label: "Phone (displayed)", name: "phone", widget: "string" }
+          - { label: "Phone Link", name: "phone_href", widget: "string", hint: "Format: tel:+91XXXXXXXXXX" }
+          - { label: "Email", name: "email", widget: "string" }
+          - { label: "WhatsApp Link", name: "whatsapp_href", widget: "string", hint: "Format: https://wa.me/91XXXXXXXXXX" }
+          - { label: "Business Hours", name: "hours", widget: "string" }
+          - { label: "Map Note", name: "map_embed_note", widget: "string", required: false }
+          - { label: "Instagram URL", name: "instagram_url", widget: "string", required: false }
+          - { label: "Facebook URL", name: "facebook_url", widget: "string", required: false }

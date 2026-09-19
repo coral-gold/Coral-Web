@@ -1,0 +1,11 @@
+{
+  "address_line": "[Address Line 1], Surat, Gujarat – [PIN], India",
+  "phone": "+91 00000 00000",
+  "phone_href": "tel:+910000000000",
+  "email": "info@coral.example",
+  "whatsapp_href": "https://wa.me/910000000000",
+  "hours": "[Business hours — pending confirmation, e.g. Mon–Sat, 10:00 AM – 7:00 PM IST]",
+  "map_embed_note": "Map embed pending exact address confirmation.",
+  "instagram_url": "#",
+  "facebook_url": "#"
+}

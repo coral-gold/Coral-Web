@@ -1,55 +1,112 @@
+/* Shared behavior for every page: header/footer partial injection,
+   nav + scroll-shrink header, footer year/social, and the scroll-reveal
+   + count-up system used across pages. Page-specific rendering (home,
+   about, catalog, wholesale, contact) lives in its own js/<page>.js file. */
 (function () {
   "use strict";
 
-  /* Sticky header shrink-on-scroll */
-  var header = document.querySelector(".site-header");
-  if (header) {
-    var onScroll = function () {
-      header.classList.toggle("is-scrolled", window.scrollY > 12);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-  }
+  window.Coral = window.Coral || {};
 
-  /* Mobile hamburger menu (FR-2) */
-  var navToggle = document.getElementById("navToggle");
-  var primaryNav = document.getElementById("primaryNav");
-
-  if (navToggle && primaryNav) {
-    navToggle.addEventListener("click", function () {
-      var isOpen = primaryNav.classList.toggle("is-open");
-      navToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  /* ---- tiny fetch-JSON helper shared by page scripts ---- */
+  window.Coral.loadJSON = function (path) {
+    return fetch(path).then(function (res) {
+      if (!res.ok) throw new Error("Failed to load " + path);
+      return res.json();
     });
+  };
 
-    primaryNav.querySelectorAll("a").forEach(function (link) {
-      link.addEventListener("click", function () {
-        primaryNav.classList.remove("is-open");
-        navToggle.setAttribute("aria-expanded", "false");
+  /* ---- escape helper for content coming from CMS-edited JSON ---- */
+  window.Coral.escapeHTML = function (str) {
+    var div = document.createElement("div");
+    div.textContent = str == null ? "" : String(str);
+    return div.innerHTML;
+  };
+
+  function initHeader() {
+    var header = document.querySelector(".site-header");
+    if (header) {
+      var onScroll = function () {
+        header.classList.toggle("is-scrolled", window.scrollY > 12);
+      };
+      onScroll();
+      window.addEventListener("scroll", onScroll, { passive: true });
+    }
+
+    var navToggle = document.getElementById("navToggle");
+    var primaryNav = document.getElementById("primaryNav");
+    if (navToggle && primaryNav) {
+      navToggle.addEventListener("click", function () {
+        var isOpen = primaryNav.classList.toggle("is-open");
+        navToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
       });
-    });
+      primaryNav.querySelectorAll("a").forEach(function (link) {
+        link.addEventListener("click", function () {
+          primaryNav.classList.remove("is-open");
+          navToggle.setAttribute("aria-expanded", "false");
+        });
+      });
+    }
+
+    var currentPage = document.body.getAttribute("data-page");
+    if (currentPage) {
+      var activeLink = document.querySelector('[data-nav="' + currentPage + '"]');
+      if (activeLink) activeLink.setAttribute("aria-current", "page");
+    }
   }
 
-  /* Footer year */
-  var yearEl = document.getElementById("year");
-  if (yearEl) {
-    yearEl.textContent = new Date().getFullYear();
+  function initFooter() {
+    var yearEl = document.getElementById("year");
+    if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+    window.Coral.loadJSON("content/pages/contact.json")
+      .then(function (contact) {
+        var fab = document.getElementById("whatsappFab");
+        if (fab && contact.whatsapp_href) fab.href = contact.whatsapp_href;
+
+        var ig = document.querySelector('[data-social="instagram"]');
+        var fb = document.querySelector('[data-social="facebook"]');
+        if (ig && contact.instagram_url) ig.href = contact.instagram_url;
+        if (fb && contact.facebook_url) fb.href = contact.facebook_url;
+      })
+      .catch(function () {
+        /* footer still works with default hrefs if content fails to load */
+      });
   }
 
-  /* Scroll reveal + count-up, driven by a single lightweight IntersectionObserver */
-  var revealEls = document.querySelectorAll(".reveal");
-  if (revealEls.length && "IntersectionObserver" in window) {
+  function includePartial(selector, url, afterInject) {
+    var slot = document.querySelector(selector);
+    if (!slot) return Promise.resolve();
+    return fetch(url)
+      .then(function (res) {
+        return res.text();
+      })
+      .then(function (html) {
+        slot.outerHTML = html;
+        if (afterInject) afterInject();
+      });
+  }
+
+  /* ---- scroll reveal + count-up, shared across all pages ---- */
+  window.Coral.initReveal = function () {
+    var revealEls = document.querySelectorAll(".reveal");
+    if (!revealEls.length) return;
+
+    if (!("IntersectionObserver" in window)) {
+      revealEls.forEach(function (el) {
+        el.classList.add("is-visible");
+      });
+      return;
+    }
+
     var counted = new WeakSet();
-
     var runCounters = function (root) {
-      var counters = root.querySelectorAll("[data-count]");
-      counters.forEach(function (el) {
+      root.querySelectorAll("[data-count]").forEach(function (el) {
         if (counted.has(el)) return;
         counted.add(el);
         var target = parseInt(el.getAttribute("data-count"), 10) || 0;
         var suffix = el.getAttribute("data-suffix") || "";
         var start = performance.now();
         var duration = 1100;
-
         var step = function (now) {
           var progress = Math.min((now - start) / duration, 1);
           var eased = 1 - Math.pow(1 - progress, 3);
@@ -76,103 +133,19 @@
     revealEls.forEach(function (el) {
       observer.observe(el);
     });
-  } else {
-    revealEls.forEach(function (el) {
-      el.classList.add("is-visible");
+  };
+
+  document.addEventListener("DOMContentLoaded", function () {
+    Promise.all([
+      includePartial("#header-placeholder", "partials/header.html", initHeader),
+      includePartial("#footer-placeholder", "partials/footer.html", initFooter)
+    ]).then(function () {
+      document.dispatchEvent(new CustomEvent("partials:loaded"));
     });
-  }
 
-  /* Contact form validation + submission (FR-5)
-     No backend/database is used. This sends the enquiry via the visitor's
-     default email client (mailto:). To use a lightweight email-sending
-     service instead (e.g. Formspree), set FORM_ENDPOINT below to that
-     service's endpoint URL and the form will POST to it instead. */
-  var FORM_ENDPOINT = null; // e.g. "https://formspree.io/f/your-id"
-  var CONTACT_EMAIL = "info@coral.example"; // PLACEHOLDER: replace with confirmed email
-
-  var form = document.getElementById("contactForm");
-  if (form) {
-    var fields = {
-      name: { input: document.getElementById("name"), error: document.getElementById("nameError") },
-      contactMethod: { input: document.getElementById("contactMethod"), error: document.getElementById("contactMethodError") },
-      message: { input: document.getElementById("message"), error: document.getElementById("messageError") }
-    };
-    var formNote = document.getElementById("formNote");
-
-    function validate() {
-      var valid = true;
-
-      if (!fields.name.input.value.trim()) {
-        fields.name.error.textContent = "Please enter your name.";
-        fields.name.input.parentElement.classList.add("has-error");
-        valid = false;
-      } else {
-        fields.name.error.textContent = "";
-        fields.name.input.parentElement.classList.remove("has-error");
-      }
-
-      var contactVal = fields.contactMethod.input.value.trim();
-      var emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      var phonePattern = /^[+()\-\s\d]{7,}$/;
-      if (!contactVal || (!emailPattern.test(contactVal) && !phonePattern.test(contactVal))) {
-        fields.contactMethod.error.textContent = "Please enter a valid phone number or email address.";
-        fields.contactMethod.input.parentElement.classList.add("has-error");
-        valid = false;
-      } else {
-        fields.contactMethod.error.textContent = "";
-        fields.contactMethod.input.parentElement.classList.remove("has-error");
-      }
-
-      if (!fields.message.input.value.trim()) {
-        fields.message.error.textContent = "Please enter a message.";
-        fields.message.input.parentElement.classList.add("has-error");
-        valid = false;
-      } else {
-        fields.message.error.textContent = "";
-        fields.message.input.parentElement.classList.remove("has-error");
-      }
-
-      return valid;
-    }
-
-    form.addEventListener("submit", function (event) {
-      event.preventDefault();
-      formNote.textContent = "";
-
-      if (!validate()) {
-        formNote.textContent = "Please fix the highlighted fields.";
-        return;
-      }
-
-      var name = fields.name.input.value.trim();
-      var contactVal = fields.contactMethod.input.value.trim();
-      var message = fields.message.input.value.trim();
-
-      if (FORM_ENDPOINT) {
-        fetch(FORM_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ name: name, contact: contactVal, message: message })
-        })
-          .then(function (res) {
-            if (res.ok) {
-              form.reset();
-              formNote.textContent = "Thank you! Your enquiry has been sent.";
-            } else {
-              formNote.textContent = "Something went wrong. Please try again or contact us directly.";
-            }
-          })
-          .catch(function () {
-            formNote.textContent = "Something went wrong. Please try again or contact us directly.";
-          });
-      } else {
-        var subject = "Enquiry from " + name;
-        var body = "Name: " + name + "\nContact: " + contactVal + "\n\nMessage:\n" + message;
-        var mailtoLink =
-          "mailto:" + CONTACT_EMAIL + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
-        window.location.href = mailtoLink;
-        formNote.textContent = "Opening your email app to send this enquiry...";
-      }
-    });
-  }
+    /* Reveal works on content already in the initial HTML; page scripts
+       that render content dynamically call Coral.initReveal() again
+       after they inject their markup. */
+    window.Coral.initReveal();
+  });
 })();

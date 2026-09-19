@@ -1104,3 +1104,362 @@ section {
     height: 52px;
   }
 }
+
+/* ==========================================================================
+   Multi-page additions: page hero, CTA banner, about/wholesale/catalog
+   ========================================================================== */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.page-hero {
+  padding: 64px 0 40px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--blush), var(--ivory));
+}
+
+.page-hero h1 {
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  margin-bottom: 12px;
+}
+
+.page-hero .section-sub {
+  max-width: 60ch;
+  margin: 0 auto;
+}
+
+.section-cta {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.cta-banner {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  padding: 64px 0;
+}
+
+.cta-banner-inner {
+  text-align: center;
+  color: var(--ivory);
+}
+
+.cta-banner-inner h2 {
+  color: var(--ivory);
+  margin-bottom: 10px;
+}
+
+.cta-banner-inner p {
+  color: rgba(255, 252, 237, 0.85);
+  margin-bottom: 24px;
+}
+
+.cta-banner-inner .btn-primary {
+  background: var(--ivory);
+  color: var(--primary);
+}
+
+.cta-banner-inner .btn-primary:hover,
+.cta-banner-inner .btn-primary:focus-visible {
+  color: var(--primary);
+  background: var(--white);
+}
+
+/* About page: mission/vision + facility */
+.mission-vision {
+  background: var(--white);
+  padding-top: 0;
+}
+
+.mission-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.mission-card {
+  background: var(--pale-pink);
+  border-radius: var(--radius);
+  padding: 32px;
+}
+
+.mission-card h3 {
+  margin-bottom: 12px;
+}
+
+.mission-card p {
+  color: var(--text-light);
+  margin: 0;
+}
+
+.draft-note {
+  margin-top: 20px;
+  font-size: 0.82rem;
+  color: var(--text-light);
+  font-style: italic;
+}
+
+.facility {
+  background: var(--blush);
+}
+
+.facility-list {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.facility-list li {
+  position: relative;
+  padding: 14px 0 14px 32px;
+  color: var(--text);
+  border-bottom: 1px solid rgba(109, 7, 60, 0.12);
+}
+
+.facility-list li:last-child {
+  border-bottom: none;
+}
+
+.facility-list li::before {
+  content: "✦";
+  position: absolute;
+  left: 0;
+  color: var(--secondary);
+}
+
+/* Wholesale page */
+.wholesale-section {
+  background: var(--white);
+}
+
+.wholesale-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.wholesale-block {
+  background: var(--pale-pink);
+  border-radius: var(--radius);
+  padding: 30px 26px;
+}
+
+.wholesale-block h3 {
+  font-size: 1.15rem;
+  margin-bottom: 10px;
+}
+
+.wholesale-block p {
+  color: var(--text-light);
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* Catalog page */
+.catalog-section {
+  background: var(--white);
+  padding-top: 40px;
+}
+
+.catalog-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 36px;
+}
+
+.catalog-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-pill {
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--text);
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+}
+
+.filter-pill:hover,
+.filter-pill:focus-visible {
+  border-color: var(--secondary);
+  color: var(--secondary);
+}
+
+.filter-pill.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--white);
+}
+
+.catalog-search input {
+  padding: 10px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  min-width: 220px;
+  background: var(--white);
+  color: var(--text);
+}
+
+.catalog-search input:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 26px;
+}
+
+.catalog-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease);
+}
+
+.catalog-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-strong);
+}
+
+.catalog-card-media {
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+}
+
+.catalog-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s var(--ease);
+}
+
+.catalog-card:hover .catalog-card-media img {
+  transform: scale(1.06);
+}
+
+.catalog-card-body {
+  padding: 20px;
+}
+
+.catalog-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--secondary);
+  background: var(--pale-pink);
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+.catalog-card-body h3 {
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+}
+
+.catalog-card-body p {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.featured-grid {
+  grid-auto-rows: 260px;
+}
+
+.catalog-empty,
+.catalog-error {
+  text-align: center;
+  color: var(--text-light);
+  padding: 40px 0;
+}
+
+/* Contact page: optional label + honeypot + map */
+.optional {
+  color: var(--text-light);
+  font-weight: 400;
+  font-size: 0.82em;
+}
+
+.honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.map-embed {
+  margin-top: 28px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+}
+
+.map-embed iframe {
+  width: 100%;
+  height: 240px;
+  border: 0;
+  display: block;
+}
+
+.map-note {
+  background: var(--pale-pink);
+  color: var(--text-light);
+  font-size: 0.8rem;
+  margin: 0;
+  padding: 10px 16px;
+}
+
+@media (max-width: 900px) {
+  .mission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wholesale-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .catalog-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .catalog-search input {
+    width: 100%;
+  }
+}

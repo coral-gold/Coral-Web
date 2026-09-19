@@ -1,0 +1,47 @@
+[
+  {
+    "slug": "necklace-earrings-set",
+    "title": "Necklace & Earrings Set",
+    "category": "Necklaces",
+    "image": "assets/products/necklace-earrings-set.webp",
+    "description": "A statement necklace and earrings set featuring cascading CZ stones set in rose gold, finished with a floral pendant drop.",
+    "featured": true,
+    "order": 1
+  },
+  {
+    "slug": "pendant-earrings-set",
+    "title": "Pendant & Earrings Set",
+    "category": "Pendants",
+    "image": "assets/products/pendant-earrings-set.webp",
+    "description": "A ribboned rose gold pendant and matching earrings, ringed with sparkling CZ stones for an everyday-elegant look.",
+    "featured": true,
+    "order": 2
+  },
+  {
+    "slug": "rose-gold-watch",
+    "title": "Rose Gold Watch",
+    "category": "Watches",
+    "image": "assets/products/rose-gold-watch.webp",
+    "description": "A mother-of-pearl dial watch on a rose gold CZ-studded bracelet strap, pairing timekeeping with signature Coral sparkle.",
+    "featured": true,
+    "order": 3
+  },
+  {
+    "slug": "mens-bracelet",
+    "title": "Men's Bracelet",
+    "category": "Bracelets",
+    "image": "assets/products/mens-bracelet.webp",
+    "description": "A structured rose gold link bracelet with textured plates, designed as an everyday piece with a refined finish.",
+    "featured": false,
+    "order": 4
+  },
+  {
+    "slug": "womens-bracelet",
+    "title": "Women's Bracelet",
+    "category": "Bracelets",
+    "image": "assets/products/womens-bracelet.webp",
+    "description": "A delicate rose gold bracelet set with a cross-and-star link pattern, lined with CZ stones for everyday sparkle.",
+    "featured": true,
+    "order": 5
+  }
+]
