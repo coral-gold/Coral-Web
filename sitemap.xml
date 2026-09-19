@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- PLACEHOLDER: replace the domain below with the real production domain once it's confirmed (SRS 5: hosting/domain is an open item). -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://www.coralgold.example/index.html</loc></url>
-  <url><loc>https://www.coralgold.example/about.html</loc></url>
-  <url><loc>https://www.coralgold.example/catalog.html</loc></url>
-  <url><loc>https://www.coralgold.example/wholesale.html</loc></url>
-  <url><loc>https://www.coralgold.example/contact.html</loc></url>
+  <url><loc>https://coralgold.in/index.html</loc></url>
+  <url><loc>https://coralgold.in/about.html</loc></url>
+  <url><loc>https://coralgold.in/catalog.html</loc></url>
+  <url><loc>https://coralgold.in/wholesale.html</loc></url>
+  <url><loc>https://coralgold.in/contact.html</loc></url>
 </urlset>
