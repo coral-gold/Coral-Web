@@ -1,6 +1,16 @@
 (function () {
   "use strict";
 
+  /* Sticky header shrink-on-scroll */
+  var header = document.querySelector(".site-header");
+  if (header) {
+    var onScroll = function () {
+      header.classList.toggle("is-scrolled", window.scrollY > 12);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+  }
+
   /* Mobile hamburger menu (FR-2) */
   var navToggle = document.getElementById("navToggle");
   var primaryNav = document.getElementById("primaryNav");
@@ -25,13 +35,60 @@
     yearEl.textContent = new Date().getFullYear();
   }
 
+  /* Scroll reveal + count-up, driven by a single lightweight IntersectionObserver */
+  var revealEls = document.querySelectorAll(".reveal");
+  if (revealEls.length && "IntersectionObserver" in window) {
+    var counted = new WeakSet();
+
+    var runCounters = function (root) {
+      var counters = root.querySelectorAll("[data-count]");
+      counters.forEach(function (el) {
+        if (counted.has(el)) return;
+        counted.add(el);
+        var target = parseInt(el.getAttribute("data-count"), 10) || 0;
+        var suffix = el.getAttribute("data-suffix") || "";
+        var start = performance.now();
+        var duration = 1100;
+
+        var step = function (now) {
+          var progress = Math.min((now - start) / duration, 1);
+          var eased = 1 - Math.pow(1 - progress, 3);
+          el.textContent = Math.round(target * eased) + suffix;
+          if (progress < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+    };
+
+    var observer = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            runCounters(entry.target);
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.18, rootMargin: "0px 0px -60px 0px" }
+    );
+
+    revealEls.forEach(function (el) {
+      observer.observe(el);
+    });
+  } else {
+    revealEls.forEach(function (el) {
+      el.classList.add("is-visible");
+    });
+  }
+
   /* Contact form validation + submission (FR-5)
      No backend/database is used. This sends the enquiry via the visitor's
      default email client (mailto:). To use a lightweight email-sending
      service instead (e.g. Formspree), set FORM_ENDPOINT below to that
      service's endpoint URL and the form will POST to it instead. */
   var FORM_ENDPOINT = null; // e.g. "https://formspree.io/f/your-id"
-  var CONTACT_EMAIL = "info@coralgold.example"; // PLACEHOLDER: replace with confirmed email
+  var CONTACT_EMAIL = "info@coral.example"; // PLACEHOLDER: replace with confirmed email
 
   var form = document.getElementById("contactForm");
   if (form) {
