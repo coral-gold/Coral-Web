@@ -111,11 +111,6 @@ function require_party(): array
         flash('error', 'Please sign in to continue.');
         redirect(url('login.php'));
     }
-    // A freshly created or reset account must set its own password first.
-    $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
-    if ((int) $party['must_change_password'] === 1 && $script !== 'password.php' && $script !== 'logout.php') {
-        redirect(url('order/password.php'));
-    }
     return $party;
 }
 

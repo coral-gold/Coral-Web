@@ -8,40 +8,40 @@
 
 SET NAMES utf8mb4;
 
-INSERT IGNORE INTO categories (name, slug, sort_order) VALUES
-  ('Necklaces', 'necklaces', 10),
-  ('Pendants',  'pendants',  20),
-  ('Bracelets', 'bracelets', 30),
-  ('Watches',   'watches',   40);
+INSERT IGNORE INTO categories (name, slug) VALUES
+  ('Necklaces', 'necklaces'),
+  ('Pendants',  'pendants'),
+  ('Bracelets', 'bracelets'),
+  ('Watches',   'watches');
 
 INSERT IGNORE INTO products
-  (name, category_id, image_path, description, featured, sort_order)
+  (name, category_id, image_path, description, featured)
 VALUES
   ('Necklace & Earrings Set',
    (SELECT id FROM categories WHERE slug = 'necklaces'),
    'assets/products/necklace-earrings-set.webp',
    'A statement necklace and earrings set featuring cascading CZ stones set in rose gold, finished with a floral pendant drop.',
-   1, 10),
+   1),
   ('Pendant & Earrings Set',
    (SELECT id FROM categories WHERE slug = 'pendants'),
    'assets/products/pendant-earrings-set.webp',
    'A ribboned rose gold pendant and matching earrings, ringed with sparkling CZ stones for an everyday-elegant look.',
-   1, 20),
+   1),
   ('Rose Gold Watch',
    (SELECT id FROM categories WHERE slug = 'watches'),
    'assets/products/rose-gold-watch.webp',
    'A mother-of-pearl dial watch on a rose gold CZ-studded bracelet strap, pairing timekeeping with signature Coral sparkle.',
-   1, 30),
+   1),
   ('Men''s Bracelet',
    (SELECT id FROM categories WHERE slug = 'bracelets'),
    'assets/products/mens-bracelet.webp',
    'A structured rose gold link bracelet with textured plates, designed as an everyday piece with a refined finish.',
-   0, 40),
+   0),
   ('Women''s Bracelet',
    (SELECT id FROM categories WHERE slug = 'bracelets'),
    'assets/products/womens-bracelet.webp',
    'A delicate rose gold bracelet set with a cross-and-star link pattern, lined with CZ stones for everyday sparkle.',
-   1, 50);
+   1);
 
 INSERT INTO site_content (content_key, content_value) VALUES
   ('home_hero_eyebrow',      'Not just an accessory'),

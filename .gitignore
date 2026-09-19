@@ -9,3 +9,7 @@ assets/uploads/*
 .DS_Store
 Thumbs.db
 *.log
+
+# Generated thumbnail cache — rebuilt on demand from the source images.
+assets/thumbs/*
+!assets/thumbs/.gitkeep

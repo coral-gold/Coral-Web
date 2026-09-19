@@ -97,6 +97,10 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
             'Svg\\' => 4,
             'Sabberworm\\CSS\\' => 15,
         ),
+        'O' => 
+        array (
+            'OpenSpout\\' => 10,
+        ),
         'M' => 
         array (
             'Masterminds\\' => 12,
@@ -119,6 +123,10 @@ class ComposerStaticInitac2d307f4ed514763a8119f3523066bb
         'Sabberworm\\CSS\\' => 
         array (
             0 => __DIR__ . '/..' . '/sabberworm/php-css-parser/src',
+        ),
+        'OpenSpout\\' => 
+        array (
+            0 => __DIR__ . '/..' . '/openspout/openspout/src',
         ),
         'Masterminds\\' => 
         array (

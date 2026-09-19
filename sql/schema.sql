@@ -15,11 +15,12 @@ CREATE TABLE IF NOT EXISTS admins (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------ categories
+-- A category is nothing but a name (batch 3, item 1). The slug is derived
+-- from it for stable URLs and is not separately editable.
 CREATE TABLE IF NOT EXISTS categories (
-  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name        VARCHAR(120) NOT NULL,
-  slug        VARCHAR(140) NOT NULL,
-  sort_order  INT          NOT NULL DEFAULT 10,
+  id    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name  VARCHAR(120) NOT NULL,
+  slug  VARCHAR(140) NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_categories_slug (slug)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -28,6 +29,9 @@ CREATE TABLE IF NOT EXISTS categories (
 -- design_number / jewel_code / weights are nullable: existing catalogue
 -- photos were imported before that data was supplied, and the admin panel
 -- fills them in. The public catalogue never exposes jewel_code or weights.
+-- jewel_code is the natural key the ERP export upserts on, so it is unique.
+-- It is NULL (not '') when absent, because MySQL permits many NULLs in a
+-- unique index — so hand-added products without a code still save.
 CREATE TABLE IF NOT EXISTS products (
   id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
   category_id    INT UNSIGNED     NULL,
@@ -36,32 +40,32 @@ CREATE TABLE IF NOT EXISTS products (
   jewel_code     VARCHAR(80)      NULL,
   gross_weight   DECIMAL(10,3)    NULL,
   net_weight     DECIMAL(10,3)    NULL,
+  quantity       INT UNSIGNED     NULL,
   description    TEXT             NULL,
   image_path     VARCHAR(255) NOT NULL DEFAULT '',
   featured       TINYINT(1)   NOT NULL DEFAULT 0,
   is_active      TINYINT(1)   NOT NULL DEFAULT 1,
-  sort_order     INT          NOT NULL DEFAULT 10,
   created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  KEY idx_products_category (category_id),
+  UNIQUE KEY uq_products_jewel_code (jewel_code),
+  KEY idx_products_category_active (category_id, is_active),
   KEY idx_products_active (is_active),
   CONSTRAINT fk_products_category FOREIGN KEY (category_id)
     REFERENCES categories (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------------- parties
--- Wholesaler accounts. Created by Admin only — no public self-registration.
+-- Wholesaler accounts. Created by Admin only — no public self-registration,
+-- and the party cannot change its own Party ID or password (batch 3,
+-- item 2), so there is no self-service state to track here.
 CREATE TABLE IF NOT EXISTS parties (
-  id                    INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  party_code            VARCHAR(64)  NOT NULL,          -- the "Party ID" used to log in
-  password_hash         VARCHAR(255) NOT NULL,
-  company_name          VARCHAR(160) NOT NULL,
-  contact_person        VARCHAR(120) NOT NULL DEFAULT '',
-  phone                 VARCHAR(40)  NOT NULL DEFAULT '',
-  email                 VARCHAR(160) NOT NULL DEFAULT '',
-  is_active             TINYINT(1)   NOT NULL DEFAULT 1,
-  must_change_password  TINYINT(1)   NOT NULL DEFAULT 1,
-  created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  party_code     VARCHAR(64)  NOT NULL,          -- the "Party ID" used to log in
+  password_hash  VARCHAR(255) NOT NULL,
+  company_name   VARCHAR(160) NOT NULL,
+  phone          VARCHAR(40)  NOT NULL DEFAULT '',
+  is_active      TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_parties_code (party_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

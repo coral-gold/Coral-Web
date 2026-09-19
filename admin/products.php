@@ -30,13 +30,13 @@ if ($categoryFilter > 0) {
     $params[] = $categoryFilter;
 }
 
-$categories = db_all('SELECT * FROM categories ORDER BY sort_order, name');
+$categories = db_all('SELECT * FROM categories ORDER BY name');
 $products = db_all(
     "SELECT p.*, c.name AS category_name
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
       WHERE $where
-      ORDER BY c.sort_order, p.sort_order, p.name",
+      ORDER BY c.name, p.design_number, p.name",
     $params
 );
 
@@ -68,7 +68,7 @@ layout_header('Products', 'admin', admin_nav(), 'products');
         <thead>
           <tr>
             <th></th><th>Name</th><th>Category</th><th>Design No.</th><th>Jewel Code</th>
-            <th>Gross</th><th>Net</th><th>Status</th><th></th>
+            <th>Gross Wt.</th><th>Net Wt.</th><th>Qty</th><th>Status</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -86,8 +86,9 @@ layout_header('Products', 'admin', admin_nav(), 'products');
               <td><?= e(fmt_text($p['category_name'])) ?></td>
               <td><?= e(fmt_text($p['design_number'])) ?></td>
               <td><?= e(fmt_text($p['jewel_code'])) ?></td>
-              <td><?= e(fmt_weight($p['gross_weight'])) ?></td>
-              <td><?= e(fmt_weight($p['net_weight'])) ?></td>
+              <td class="wt-cell"><?= e(fmt_weight($p['gross_weight'])) ?></td>
+              <td class="wt-cell"><?= e(fmt_weight($p['net_weight'])) ?></td>
+              <td class="qty-cell"><?= e(fmt_text($p['quantity'])) ?></td>
               <td>
                 <?php if ((int) $p['is_active'] === 1): ?>
                   <span class="badge badge-on">Visible</span>

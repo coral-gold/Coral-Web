@@ -24,8 +24,8 @@ if (is_post()) {
         } else {
             try {
                 db_run(
-                    'INSERT INTO categories (name, slug, sort_order) VALUES (?, ?, ?)',
-                    [$name, slugify($name), post_int('sort_order', 10)]
+                    'INSERT INTO categories (name, slug) VALUES (?, ?)',
+                    [$name, slugify($name)]
                 );
                 flash('success', 'Category added.');
             } catch (PDOException $e) {
@@ -35,10 +35,7 @@ if (is_post()) {
     } elseif ($action === 'update') {
         $name = post_str('name');
         if ($name !== '') {
-            db_run(
-                'UPDATE categories SET name = ?, sort_order = ? WHERE id = ?',
-                [$name, post_int('sort_order', 10), post_int('id')]
-            );
+            db_run('UPDATE categories SET name = ? WHERE id = ?', [$name, post_int('id')]);
             flash('success', 'Category updated.');
         }
     } elseif ($action === 'delete') {
@@ -52,7 +49,7 @@ if (is_post()) {
 
 $categories = db_all(
     'SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id) AS product_count
-       FROM categories c ORDER BY c.sort_order, c.name'
+       FROM categories c ORDER BY c.name'
 );
 
 layout_header('Categories', 'admin', admin_nav(), 'categories');
@@ -61,7 +58,7 @@ layout_header('Categories', 'admin', admin_nav(), 'categories');
 <div class="page-head">
   <div>
     <h1>Categories</h1>
-    <p>Used to group products on the public catalogue and the order section.</p>
+    <p>A category is just a name. Products are grouped by it on the public catalogue and in the order section.</p>
   </div>
 </div>
 
@@ -74,10 +71,6 @@ layout_header('Categories', 'admin', admin_nav(), 'categories');
       <label for="name">Name</label>
       <input type="text" id="name" name="name" required>
     </div>
-    <div class="field">
-      <label for="sort_order">Order</label>
-      <input type="number" id="sort_order" name="sort_order" value="10" style="width:100px;">
-    </div>
     <button type="submit" class="btn btn-primary">Add</button>
   </form>
 </div>
@@ -88,12 +81,11 @@ layout_header('Categories', 'admin', admin_nav(), 'categories');
   <?php else: ?>
     <div class="table-wrap">
       <table class="data">
-        <thead><tr><th>Name</th><th>Order</th><th>Products</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Products</th><th></th></tr></thead>
         <tbody>
           <?php foreach ($categories as $category): $cid = (int) $category['id']; ?>
             <tr>
               <td><input type="text" name="name" form="cat-save-<?= $cid ?>" value="<?= e($category['name']) ?>"></td>
-              <td><input type="number" name="sort_order" form="cat-save-<?= $cid ?>" value="<?= (int) $category['sort_order'] ?>" style="width:80px;"></td>
               <td><?= (int) $category['product_count'] ?></td>
               <td class="table-actions">
                 <button type="submit" class="btn btn-outline btn-sm" form="cat-save-<?= $cid ?>">Save</button>

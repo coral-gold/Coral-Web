@@ -52,9 +52,9 @@ layout_header('Quotation ' . $quotation['quotation_no'], 'order', order_nav($par
             <td><?= e($item['name']) ?></td>
             <td><?= e(fmt_text($item['design_number'])) ?></td>
             <td><?= e(fmt_text($item['jewel_code'])) ?></td>
-            <td><?= e(fmt_weight($item['gross_weight'])) ?></td>
-            <td><?= e(fmt_weight($item['net_weight'])) ?></td>
-            <td><?= (int) $item['quantity'] ?></td>
+            <td class="wt-cell"><?= e(fmt_weight($item['gross_weight'])) ?></td>
+            <td class="wt-cell"><?= e(fmt_weight($item['net_weight'])) ?></td>
+            <td class="qty-cell"><?= (int) $item['quantity'] ?></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

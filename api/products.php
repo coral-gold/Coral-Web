@@ -17,7 +17,7 @@ $rows = db_all(
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
       WHERE p.is_active = 1
-      ORDER BY c.sort_order, p.sort_order, p.name'
+      ORDER BY c.name, p.design_number, p.name'
 );
 
 $products = array_map(static function (array $row): array {

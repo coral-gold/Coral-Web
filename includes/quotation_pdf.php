@@ -29,9 +29,9 @@ function quotation_pdf_html(array $quotation): string
             . '<td>' . e($item['name']) . '</td>'
             . '<td>' . e(fmt_text($item['design_number'])) . '</td>'
             . '<td>' . e(fmt_text($item['jewel_code'])) . '</td>'
-            . '<td class="num">' . e(fmt_weight($item['gross_weight'])) . '</td>'
-            . '<td class="num">' . e(fmt_weight($item['net_weight'])) . '</td>'
-            . '<td class="num">' . (int) $item['quantity'] . '</td>'
+            . '<td class="num wt">' . e(fmt_weight($item['gross_weight'])) . '</td>'
+            . '<td class="num wt">' . e(fmt_weight($item['net_weight'])) . '</td>'
+            . '<td class="num qty">' . (int) $item['quantity'] . '</td>'
             . '</tr>';
     }
 
@@ -56,6 +56,9 @@ function quotation_pdf_html(array $quotation): string
       table.items th { background: #6D073C; color: #FFFCED; padding: 7px 6px; text-align: left; font-size: 9px; }
       table.items td { padding: 6px; border-bottom: 1px solid #F1DDE3; }
       table.items .num { text-align: right; }
+      /* Weights lead the row; piece count is deliberately quieter (item 7). */
+      table.items .wt { font-size: 12px; font-weight: bold; color: #6D073C; }
+      table.items .qty { font-size: 9px; color: #7A5566; }
       .totals { margin-top: 12px; text-align: right; font-size: 11px; color: #6D073C; font-weight: bold; }
       .notes { margin-top: 14px; padding: 10px; background: #FBDCE2; border-radius: 4px; }
       .foot { margin-top: 20px; padding-top: 10px; border-top: 1px solid #F1DDE3; color: #7A5566; font-size: 8.5px; }
@@ -79,8 +82,8 @@ function quotation_pdf_html(array $quotation): string
     <table class="items">
       <thead><tr>
         <th width="4%">#</th><th width="30%">Item</th><th width="16%">Design No.</th>
-        <th width="16%">Jewel Code</th><th width="11%" class="num">Gross Wt.</th>
-        <th width="11%" class="num">Net Wt.</th><th width="8%" class="num">Qty</th>
+        <th width="16%">Jewel Code</th><th width="12%" class="num">Gross Wt.</th>
+        <th width="12%" class="num">Net Wt.</th><th width="7%" class="num">Qty</th>
       </tr></thead>
       <tbody>' . $rows . '</tbody>
     </table>

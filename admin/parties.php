@@ -44,21 +44,14 @@ layout_header('Parties', 'admin', admin_nav(), 'parties');
     <div class="table-wrap">
       <table class="data">
         <thead>
-          <tr><th>Party ID</th><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>Quotations</th><th>Status</th><th></th></tr>
+          <tr><th>Party ID</th><th>Company</th><th>Phone</th><th>Quotations</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
           <?php foreach ($parties as $party): ?>
             <tr>
               <td><strong><?= e($party['party_code']) ?></strong></td>
-              <td>
-                <?= e($party['company_name']) ?>
-                <?php if ((int) $party['must_change_password'] === 1): ?>
-                  <span class="badge badge-off">Must set password</span>
-                <?php endif; ?>
-              </td>
-              <td><?= e(fmt_text($party['contact_person'])) ?></td>
+              <td><?= e($party['company_name']) ?></td>
               <td><?= e(fmt_text($party['phone'])) ?></td>
-              <td><?= e(fmt_text($party['email'])) ?></td>
               <td><?= (int) $party['quotation_count'] ?></td>
               <td>
                 <?php if ((int) $party['is_active'] === 1): ?>

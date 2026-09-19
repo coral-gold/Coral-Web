@@ -32,9 +32,7 @@ layout_header('Quotation ' . $quotation['quotation_no'], 'admin', admin_nav(), '
 <div class="card">
   <div class="quotation-meta">
     <div><span>Party ID</span><strong><?= e($quotation['party_code']) ?></strong></div>
-    <div><span>Contact</span><strong><?= e(fmt_text($quotation['contact_person'])) ?></strong></div>
     <div><span>Phone</span><strong><?= e(fmt_text($quotation['phone'])) ?></strong></div>
-    <div><span>Email</span><strong><?= e(fmt_text($quotation['email'])) ?></strong></div>
     <div><span>Items</span><strong><?= (int) $quotation['item_count'] ?></strong></div>
     <div><span>Total pieces</span><strong><?= (int) $quotation['total_qty'] ?></strong></div>
   </div>
@@ -51,9 +49,9 @@ layout_header('Quotation ' . $quotation['quotation_no'], 'admin', admin_nav(), '
             <td><?= e($item['name']) ?></td>
             <td><?= e(fmt_text($item['design_number'])) ?></td>
             <td><?= e(fmt_text($item['jewel_code'])) ?></td>
-            <td><?= e(fmt_weight($item['gross_weight'])) ?></td>
-            <td><?= e(fmt_weight($item['net_weight'])) ?></td>
-            <td><?= (int) $item['quantity'] ?></td>
+            <td class="wt-cell"><?= e(fmt_weight($item['gross_weight'])) ?></td>
+            <td class="wt-cell"><?= e(fmt_weight($item['net_weight'])) ?></td>
+            <td class="qty-cell"><?= (int) $item['quantity'] ?></td>
           </tr>
         <?php endforeach; ?>
       </tbody>

@@ -8,6 +8,7 @@ function admin_nav(): array
         'products'   => ['href' => url('admin/products.php'),   'label' => 'Products'],
         'categories' => ['href' => url('admin/categories.php'), 'label' => 'Categories'],
         'parties'    => ['href' => url('admin/parties.php'),    'label' => 'Parties'],
+        'import'     => ['href' => url('admin/import.php'),     'label' => 'Import'],
         'quotations' => ['href' => url('admin/quotations.php'), 'label' => 'Quotations'],
         'content'    => ['href' => url('admin/content.php'),    'label' => 'Site Content'],
     ];

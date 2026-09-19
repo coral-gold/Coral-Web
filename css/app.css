@@ -28,6 +28,11 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* An author-set display (e.g. the fixed quotation panel's "display: flex")
+   beats the browser's own [hidden] rule, which would leave hidden overlays
+   covering the page and swallowing clicks. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: var(--font-body);
@@ -261,3 +266,231 @@ table.data .thumb { width: 52px; height: 52px; object-fit: cover; border-radius:
 .inline-form { display: inline; }
 .filter-form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 22px; }
 .filter-form .field { margin-bottom: 0; }
+
+/* ==========================================================================
+   Batch 3 — weight-first cards, AJAX quotation panel
+   ========================================================================== */
+
+/* Item 7: gross and net weight are what a wholesaler judges a piece on, so
+   they are the largest thing on the card. Jewel code and piece quantity sit
+   underneath in the minor row. */
+.weights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 2px 0 4px;
+}
+
+.weight {
+  background: var(--pale-pink);
+  border-radius: 10px;
+  padding: 7px 10px;
+  text-align: center;
+}
+
+.weight span {
+  display: block;
+  font-size: .64rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-light);
+}
+
+.weight strong {
+  display: block;
+  font-family: var(--font-heading);
+  font-size: 1.22rem;
+  line-height: 1.15;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.specs {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 10px;
+  margin: 0;
+  font-size: .8rem;
+}
+.specs dt { color: var(--text-light); }
+.specs dd { margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Jewel code and piece count sit below the weights and read quieter (item 7). */
+.specs-minor { font-size: .76rem; }
+.specs-minor dd { font-weight: 500; color: var(--text); }
+
+.card-actions { margin-top: auto; }
+
+.added-flag {
+  display: block;
+  text-align: center;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--success);
+  margin-top: 5px;
+}
+
+/* Quantity stepper */
+.stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border: 1.5px solid var(--primary);
+  border-radius: 999px;
+  padding: 3px 5px;
+}
+
+.stepper .step {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--primary);
+  color: var(--white);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.stepper .step:hover { background: var(--secondary); }
+
+.step-qty {
+  flex: 1;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.add-btn[disabled] { opacity: .65; cursor: default; }
+
+.pager { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 26px; }
+
+/* -------------------------------------------------- persistent control */
+.quotation-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--white);
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(109, 7, 60, .35);
+  transition: transform .2s var(--ease), background .2s var(--ease);
+}
+.quotation-fab:hover { transform: translateY(-2px); background: var(--secondary); }
+
+.fab-count {
+  background: var(--pink);
+  color: var(--primary);
+  border-radius: 999px;
+  min-width: 22px;
+  padding: 1px 7px;
+  font-size: .78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------ quotation panel */
+.panel-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 20, 32, .45);
+  z-index: 80;
+}
+
+.quotation-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(430px, 100%);
+  background: var(--cream);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -14px 0 40px rgba(109, 7, 60, .2);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--primary);
+  color: var(--ivory);
+}
+.panel-head h2 { margin: 0; color: var(--ivory); font-size: 1.1rem; }
+
+.panel-close {
+  background: none;
+  border: 0;
+  color: var(--ivory);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.panel-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+
+.panel-line {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.panel-line img, .panel-noimg {
+  width: 52px; height: 52px; border-radius: 8px; object-fit: cover; background: var(--blush);
+}
+.panel-line-main { min-width: 0; }
+.panel-line-name { display: block; font-weight: 600; color: var(--primary); font-size: .92rem; }
+.panel-line-weights { display: block; font-size: .84rem; color: var(--text); font-variant-numeric: tabular-nums; }
+.panel-line-weights strong { color: var(--primary); }
+.panel-line-code { display: block; font-size: .74rem; color: var(--text-light); }
+.panel-line-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+
+.link-remove {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--text-light); font-size: .76rem; text-decoration: underline;
+}
+.link-remove:hover { color: var(--danger); }
+
+.panel-total { margin: 16px 0 0; font-family: var(--font-heading); color: var(--primary); }
+
+.panel-foot { border-top: 1px solid var(--border); padding: 16px 20px; background: var(--white); }
+.panel-foot .field { margin-bottom: 12px; }
+
+body.panel-open { overflow: hidden; }
+
+@media (max-width: 560px) {
+  .quotation-fab { right: 14px; bottom: 14px; padding: 12px 18px; }
+}
+
+/* Item 7: in data tables the two weights carry the decision, so they are
+   set larger than the surrounding columns and the piece count is quieter. */
+table.data .wt-cell {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+table.data .qty-cell {
+  font-size: .8rem;
+  color: var(--text-light);
+  font-variant-numeric: tabular-nums;
+}

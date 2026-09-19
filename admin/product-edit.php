@@ -15,7 +15,7 @@ if ($id > 0 && !$product) {
     redirect(url('admin/products.php'));
 }
 
-$categories = db_all('SELECT * FROM categories ORDER BY sort_order, name');
+$categories = db_all('SELECT * FROM categories ORDER BY name');
 
 if (is_post()) {
     csrf_verify();
@@ -30,7 +30,7 @@ if (is_post()) {
         'description'   => post_str('description'),
         'featured'      => isset($_POST['featured']) ? 1 : 0,
         'is_active'     => isset($_POST['is_active']) ? 1 : 0,
-        'sort_order'    => post_int('sort_order', 10),
+        'quantity'      => post_str('quantity') === '' ? null : (int) post_str('quantity'),
     ];
 
     $error = null;
@@ -53,33 +53,39 @@ if (is_post()) {
     if ($error !== null) {
         flash('error', $error);
     } else {
-        if ($product) {
+        try {
+            if ($product) {
             db_run(
                 'UPDATE products SET name=?, category_id=?, design_number=?, jewel_code=?,
-                        gross_weight=?, net_weight=?, description=?, image_path=?,
-                        featured=?, is_active=?, sort_order=?
+                        gross_weight=?, net_weight=?, quantity=?, description=?, image_path=?,
+                        featured=?, is_active=?
                   WHERE id=?',
                 [
                     $data['name'], $data['category_id'], $data['design_number'], $data['jewel_code'],
-                    $data['gross_weight'], $data['net_weight'], $data['description'], $imagePath,
-                    $data['featured'], $data['is_active'], $data['sort_order'], $id,
+                    $data['gross_weight'], $data['net_weight'], $data['quantity'], $data['description'],
+                    $imagePath, $data['featured'], $data['is_active'], $id,
                 ]
             );
             flash('success', 'Product updated.');
         } else {
             db_run(
                 'INSERT INTO products (name, category_id, design_number, jewel_code, gross_weight,
-                        net_weight, description, image_path, featured, is_active, sort_order)
+                        net_weight, quantity, description, image_path, featured, is_active)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                 [
                     $data['name'], $data['category_id'], $data['design_number'], $data['jewel_code'],
-                    $data['gross_weight'], $data['net_weight'], $data['description'], $imagePath,
-                    $data['featured'], $data['is_active'], $data['sort_order'],
+                    $data['gross_weight'], $data['net_weight'], $data['quantity'], $data['description'],
+                    $imagePath, $data['featured'], $data['is_active'],
                 ]
             );
             flash('success', 'Product added.');
         }
         redirect(url('admin/products.php'));
+        } catch (PDOException $e) {
+            // Jewel Code is unique — it is what the stock import upserts on.
+            flash('error', 'Jewel Code "' . $data['jewel_code'] . '" is already used by another product. '
+                . 'Each Jewel Code can only appear once.');
+        }
     }
 
     redirect(url('admin/product-edit.php' . ($id > 0 ? '?id=' . $id : '')));
@@ -121,9 +127,9 @@ layout_header($product ? 'Edit Product' : 'Add Product', 'admin', admin_nav(), '
         </select>
       </div>
       <div class="field">
-        <label for="sort_order">Display order</label>
-        <input type="number" id="sort_order" name="sort_order" value="<?= e($value('sort_order', 10)) ?>">
-        <span class="hint">Lower numbers appear first.</span>
+        <label for="quantity">Quantity</label>
+        <input type="number" id="quantity" name="quantity" min="0" value="<?= e($value('quantity')) ?>">
+        <span class="hint">Optional. Secondary to the weights.</span>
       </div>
     </div>
 

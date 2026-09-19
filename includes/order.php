@@ -15,12 +15,15 @@ function cart_count(int $partyId): int
 
 function cart_lines(int $partyId): array
 {
+    // The basket quantity is aliased because products now has its own
+    // "quantity" column too — with a plain "p.*" the product's value
+    // silently overwrites the basket's in the fetched row.
     return db_all(
-        'SELECT c.id AS cart_id, c.quantity, p.*
+        'SELECT p.*, c.id AS cart_id, c.quantity AS cart_quantity
            FROM cart_items c
            JOIN products p ON p.id = c.product_id
           WHERE c.party_id = ?
-          ORDER BY p.sort_order, p.name',
+          ORDER BY p.design_number, p.name',
         [$partyId]
     );
 }
@@ -84,7 +87,7 @@ function create_quotation_from_cart(int $partyId, string $notes = ''): ?int
     try {
         $totalQty = 0;
         foreach ($lines as $line) {
-            $totalQty += (int) $line['quantity'];
+            $totalQty += (int) $line['cart_quantity'];
         }
 
         // Retry on the rare race where two parties generate at the same moment.
@@ -119,7 +122,7 @@ function create_quotation_from_cart(int $partyId, string $notes = ''): ?int
                     $line['jewel_code'],
                     $line['gross_weight'],
                     $line['net_weight'],
-                    (int) $line['quantity'],
+                    (int) $line['cart_quantity'],
                 ]
             );
         }
@@ -137,7 +140,7 @@ function create_quotation_from_cart(int $partyId, string $notes = ''): ?int
 /** Loads a quotation, optionally restricted to one party. */
 function load_quotation(int $quotationId, ?int $partyId = null): ?array
 {
-    $sql = 'SELECT q.*, p.company_name, p.party_code, p.contact_person, p.phone, p.email
+    $sql = 'SELECT q.*, p.company_name, p.party_code, p.phone
               FROM quotations q
               JOIN parties p ON p.id = q.party_id
              WHERE q.id = ?';
@@ -164,11 +167,10 @@ function load_quotation(int $quotationId, ?int $partyId = null): ?array
 /** Nav definition shared by every order-section page. */
 function order_nav(int $partyId): array
 {
-    $count = cart_count($partyId);
+    // The in-progress quotation lives in the on-page panel (batch 3, item 8),
+    // so there is no "My Order" entry — "My Quotations" is the history.
     return [
         'catalogue'  => ['href' => url('order/index.php'), 'label' => 'Catalogue'],
-        'cart'       => ['href' => url('order/cart.php'), 'label' => 'My Order', 'badge' => $count > 0 ? (string) $count : ''],
         'quotations' => ['href' => url('order/quotations.php'), 'label' => 'My Quotations'],
-        'password'   => ['href' => url('order/password.php'), 'label' => 'Password'],
     ];
 }

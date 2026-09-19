@@ -1,5 +1,11 @@
 <?php
-/** Category-wise product listing for logged-in parties — SRS 4.3. */
+/**
+ * Catalogue for logged-in parties.
+ *
+ * Adding, quantity changes, removals and category switching all happen
+ * through fetch (batch 3, items 5 & 8) — the only full navigation left is
+ * generating the quotation, which deliberately produces a new document.
+ */
 
 require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/layout.php';
@@ -10,46 +16,19 @@ $partyId = (int) $party['id'];
 
 if (is_post()) {
     csrf_verify();
-    cart_add($partyId, post_int('product_id'), max(1, post_int('quantity', 1)));
-    flash('success', 'Added to your order.');
-    // Post/redirect/get so a refresh doesn't add the item twice.
-    $query = $_SERVER['QUERY_STRING'] ?? '';
-    redirect(url('order/index.php') . ($query !== '' ? '?' . $query : ''));
+    if (post_str('action') === 'generate') {
+        $quotationId = create_quotation_from_cart($partyId, post_str('notes'));
+        if ($quotationId === null) {
+            flash('error', 'Your quotation is empty, so there is nothing to generate.');
+        } else {
+            flash('success', 'Quotation generated.');
+            redirect(url('order/quotation.php?id=' . $quotationId));
+        }
+    }
+    redirect(url('order/index.php'));
 }
 
-$categories = db_all('SELECT * FROM categories ORDER BY sort_order, name');
-$activeCategory = (int) get_str('category', '0');
-
-$perPage = 12;
-$page = max(1, (int) get_str('page', '1'));
-$offset = ($page - 1) * $perPage;
-
-$where = 'p.is_active = 1';
-$params = [];
-if ($activeCategory > 0) {
-    $where .= ' AND p.category_id = ?';
-    $params[] = $activeCategory;
-}
-
-$totalRow = db_one("SELECT COUNT(*) AS total FROM products p WHERE $where", $params);
-$total = (int) ($totalRow['total'] ?? 0);
-$totalPages = max(1, (int) ceil($total / $perPage));
-
-$products = db_all(
-    "SELECT p.*, c.name AS category_name
-       FROM products p
-       LEFT JOIN categories c ON c.id = p.category_id
-      WHERE $where
-      ORDER BY c.sort_order, p.sort_order, p.name
-      LIMIT $perPage OFFSET $offset",
-    $params
-);
-
-function page_link(int $page, int $category): string
-{
-    $params = array_filter(['category' => $category ?: null, 'page' => $page > 1 ? $page : null]);
-    return url('order/index.php') . ($params ? '?' . http_build_query($params) : '');
-}
+$categories = db_all('SELECT * FROM categories ORDER BY name');
 
 layout_header('Catalogue', 'order', order_nav($partyId), 'catalogue');
 ?>
@@ -57,56 +36,61 @@ layout_header('Catalogue', 'order', order_nav($partyId), 'catalogue');
 <div class="page-head">
   <div>
     <h1>Catalogue</h1>
-    <p>Browse by category and add the pieces you want to your order.</p>
+    <p>Browse by category and add the pieces you want to your quotation.</p>
   </div>
-  <a class="btn btn-outline" href="<?= e(url('order/cart.php')) ?>">View My Order (<?= cart_count($partyId) ?>)</a>
 </div>
 
-<div class="filter-bar">
-  <a class="filter-pill<?= $activeCategory === 0 ? ' is-active' : '' ?>" href="<?= e(page_link(1, 0)) ?>">All</a>
+<div class="filter-bar" id="categoryFilters">
+  <button type="button" class="filter-pill is-active" data-category="0">All</button>
   <?php foreach ($categories as $category): ?>
-    <a class="filter-pill<?= $activeCategory === (int) $category['id'] ? ' is-active' : '' ?>"
-       href="<?= e(page_link(1, (int) $category['id'])) ?>"><?= e($category['name']) ?></a>
+    <button type="button" class="filter-pill" data-category="<?= (int) $category['id'] ?>">
+      <?= e($category['name']) ?>
+    </button>
   <?php endforeach; ?>
 </div>
 
-<?php if (!$products): ?>
-  <div class="card"><p class="empty-state">No products in this category yet.</p></div>
-<?php else: ?>
-  <div class="product-grid">
-    <?php foreach ($products as $product): ?>
-      <article class="product-card">
-        <div class="product-media">
-          <?php if ($product['image_path'] !== ''): ?>
-            <img src="<?= e(url($product['image_path'])) ?>" alt="<?= e($product['name']) ?>" loading="lazy" decoding="async">
-          <?php endif; ?>
-        </div>
-        <div class="product-body">
-          <span class="product-name"><?= e($product['name']) ?></span>
-          <dl class="spec-list">
-            <dt>Design No.</dt><dd><?= e(fmt_text($product['design_number'])) ?></dd>
-            <dt>Jewel Code</dt><dd><?= e(fmt_text($product['jewel_code'])) ?></dd>
-            <dt>Gross Wt.</dt><dd><?= e(fmt_weight($product['gross_weight'])) ?></dd>
-            <dt>Net Wt.</dt><dd><?= e(fmt_weight($product['net_weight'])) ?></dd>
-          </dl>
-          <form method="post">
-            <?= csrf_field() ?>
-            <input type="hidden" name="product_id" value="<?= (int) $product['id'] ?>">
-            <input type="hidden" name="quantity" value="1">
-            <button type="submit" class="btn btn-primary btn-sm btn-block">Add to Order</button>
-          </form>
-        </div>
-      </article>
-    <?php endforeach; ?>
-  </div>
+<div class="product-grid" id="productGrid" aria-live="polite" aria-busy="true">
+  <p class="empty-state">Loading catalogue&hellip;</p>
+</div>
 
-  <?php if ($totalPages > 1): ?>
-    <div class="filter-bar" style="margin-top:28px; justify-content:center;">
-      <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-        <a class="filter-pill<?= $i === $page ? ' is-active' : '' ?>" href="<?= e(page_link($i, $activeCategory)) ?>"><?= $i ?></a>
-      <?php endfor; ?>
-    </div>
-  <?php endif; ?>
-<?php endif; ?>
+<div class="pager" id="pager" hidden></div>
+
+<!-- Persistent quotation control (item 8) -->
+<button type="button" class="quotation-fab" id="quotationFab" hidden>
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+    <path d="M6 4h12l1 16H5L6 4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M9 8h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </svg>
+  View Quotation <span class="fab-count" id="fabCount">0</span>
+</button>
+
+<div class="panel-backdrop" id="panelBackdrop" hidden></div>
+<aside class="quotation-panel" id="quotationPanel" hidden aria-label="Current quotation">
+  <header class="panel-head">
+    <h2>Current Quotation</h2>
+    <button type="button" class="panel-close" id="panelClose" aria-label="Close">&times;</button>
+  </header>
+
+  <div class="panel-body" id="panelBody"></div>
+
+  <footer class="panel-foot">
+    <p class="no-price-note">Pricing is agreed separately — this is an item request list, not an invoice.</p>
+    <form method="post" id="generateForm">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="generate">
+      <div class="field">
+        <label for="notes">Notes for Coral Gold (optional)</label>
+        <textarea id="notes" name="notes" rows="2" placeholder="Anything we should know&hellip;"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="generateBtn">Generate Quotation</button>
+    </form>
+  </footer>
+</aside>
+
+<script>
+  window.CORAL_CSRF = <?= json_encode(csrf_token()) ?>;
+  window.CORAL_BASE = <?= json_encode(base_path()) ?>;
+</script>
+<script src="<?= e(url('js/order-catalogue.js')) ?>" defer></script>
 
 <?php layout_footer(); ?>
