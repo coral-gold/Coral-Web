@@ -1,7 +1,10 @@
 backend:
   name: git-gateway
-  # Change this if your production/deploy branch is not "main".
-  branch: main
+  # This must match the branch Hostinger deploys from. Content edits made
+  # in this admin panel commit straight to this branch and go live
+  # immediately — code/feature changes are developed on a separate branch
+  # and only merged in when explicitly promoted.
+  branch: production
 
 # Shown as a friendly heading inside the admin panel.
 site_url: https://coralgold.example
