@@ -21,14 +21,14 @@ layout_header('My Quotations', 'order', order_nav($partyId), 'quotations');
     <h1>My Quotations</h1>
     <p>Every quotation you've generated, newest first.</p>
   </div>
-  <a class="btn btn-outline" href="<?= e(url('order/index.php')) ?>">Browse catalogue</a>
+  <a class="btn btn-outline" href="<?= e(url('pages/order-catalogue.php')) ?>">Browse catalogue</a>
 </div>
 
 <div class="card">
   <?php if (!$quotations): ?>
     <p class="empty-state">
       You haven't generated any quotations yet.<br>
-      <a href="<?= e(url('order/index.php')) ?>">Add items to your order</a> to create one.
+      <a href="<?= e(url('pages/order-catalogue.php')) ?>">Add items to your order</a> to create one.
     </p>
   <?php else: ?>
     <div class="table-wrap">
@@ -44,7 +44,7 @@ layout_header('My Quotations', 'order', order_nav($partyId), 'quotations');
               <td><?= (int) $quotation['item_count'] ?></td>
               <td><?= (int) $quotation['total_qty'] ?></td>
               <td class="table-actions">
-                <a class="btn btn-outline btn-sm" href="<?= e(url('order/quotation.php?id=' . (int) $quotation['id'])) ?>">View</a>
+                <a class="btn btn-outline btn-sm" href="<?= e(url('pages/quotation-view.php?id=' . (int) $quotation['id'])) ?>">View</a>
                 <a class="btn btn-primary btn-sm" href="<?= e(url('order/quotation-pdf.php?id=' . (int) $quotation['id'])) ?>">PDF</a>
               </td>
             </tr>

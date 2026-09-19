@@ -22,10 +22,10 @@ if (is_post()) {
             flash('error', 'Your quotation is empty, so there is nothing to generate.');
         } else {
             flash('success', 'Quotation generated.');
-            redirect(url('order/quotation.php?id=' . $quotationId));
+            redirect(url('pages/quotation-view.php?id=' . $quotationId));
         }
     }
-    redirect(url('order/index.php'));
+    redirect(url('pages/order-catalogue.php'));
 }
 
 $categories = db_all('SELECT * FROM categories ORDER BY name');

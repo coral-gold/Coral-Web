@@ -12,7 +12,7 @@ $partyId = (int) $party['id'];
 $quotation = load_quotation((int) get_str('id', '0'), $partyId);
 if (!$quotation) {
     flash('error', 'That quotation could not be found.');
-    redirect(url('order/quotations.php'));
+    redirect(url('pages/my-quotations.php'));
 }
 
 layout_header('Quotation ' . $quotation['quotation_no'], 'order', order_nav($partyId), 'quotations');
@@ -25,7 +25,7 @@ layout_header('Quotation ' . $quotation['quotation_no'], 'order', order_nav($par
   </div>
   <div class="table-actions">
     <a class="btn btn-primary" href="<?= e(url('order/quotation-pdf.php?id=' . (int) $quotation['id'])) ?>">Download PDF</a>
-    <a class="btn btn-outline" href="<?= e(url('order/quotations.php')) ?>">All quotations</a>
+    <a class="btn btn-outline" href="<?= e(url('pages/my-quotations.php')) ?>">All quotations</a>
   </div>
 </div>
 

@@ -170,7 +170,7 @@ function order_nav(int $partyId): array
     // The in-progress quotation lives in the on-page panel (batch 3, item 8),
     // so there is no "My Order" entry — "My Quotations" is the history.
     return [
-        'catalogue'  => ['href' => url('order/index.php'), 'label' => 'Catalogue'],
-        'quotations' => ['href' => url('order/quotations.php'), 'label' => 'My Quotations'],
+        'catalogue'  => ['href' => url('pages/order-catalogue.php'), 'label' => 'Catalogue'],
+        'quotations' => ['href' => url('pages/my-quotations.php'), 'label' => 'My Quotations'],
     ];
 }

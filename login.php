@@ -5,7 +5,7 @@ require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/layout.php';
 
 if (current_party()) {
-    redirect(url('order/index.php'));
+    redirect(url('pages/order-catalogue.php'));
 }
 
 $partyCode = '';
@@ -20,7 +20,7 @@ if (is_post()) {
     } elseif (login_is_locked('party', $partyCode)) {
         flash('error', 'Too many failed attempts. Please wait a few minutes and try again, or contact Coral Gold.');
     } elseif (party_attempt_login($partyCode, $password)) {
-        redirect(url('order/index.php'));
+        redirect(url('pages/order-catalogue.php'));
     } else {
         // Deliberately generic: never reveal whether the ID exists.
         flash('error', 'Invalid Party ID or password.');

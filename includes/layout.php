@@ -27,7 +27,7 @@ function layout_header(string $title, string $area = 'order', array $nav = [], s
 <body class="app app-<?= e($area) ?>">
 <header class="app-header">
   <div class="app-header-inner">
-    <a class="app-brand" href="<?= e(url($area === 'admin' ? 'admin/dashboard.php' : 'order/index.php')) ?>">
+    <a class="app-brand" href="<?= e(url($area === 'admin' ? 'admin/dashboard.php' : 'pages/order-catalogue.php')) ?>">
       <img src="<?= e(url('assets/logo.png')) ?>" alt="Coral" width="900" height="341">
       <span class="app-area-tag"><?= $area === 'admin' ? 'Admin' : 'Wholesaler' ?></span>
     </a>
