@@ -2,7 +2,7 @@
   "use strict";
   var esc = window.Coral.escapeHTML;
 
-  window.Coral.loadJSON("content/pages/home.json").then(function (data) {
+  window.Coral.loadJSON("api/content.php?page=home").then(function (data) {
     var eyebrow = document.getElementById("heroEyebrow");
     var heading = document.getElementById("heroHeading");
     var sub = document.getElementById("heroSub");
@@ -27,7 +27,7 @@
 
   var grid = document.getElementById("featuredGrid");
   if (grid) {
-    window.Coral.loadJSON("content/products.json").then(function (products) {
+    window.Coral.loadJSON("api/products.php").then(function (products) {
       var featured = products.filter(function (p) { return p.featured; }).slice(0, 4);
       grid.innerHTML = featured
         .map(function (p) {

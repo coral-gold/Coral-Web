@@ -2,7 +2,7 @@
   "use strict";
   var esc = window.Coral.escapeHTML;
 
-  window.Coral.loadJSON("content/pages/about.json").then(function (data) {
+  window.Coral.loadJSON("api/content.php?page=about").then(function (data) {
     var eyebrow = document.getElementById("aboutEyebrow");
     var heading = document.getElementById("aboutHeading");
     var story = document.getElementById("aboutStory");

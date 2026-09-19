@@ -34,6 +34,7 @@
           '<div class="catalog-card-body">' +
           '<span class="catalog-tag">' + esc(p.category) + "</span>" +
           "<h3>" + esc(p.title) + "</h3>" +
+          (p.designNumber ? '<p class="catalog-design">Design No. ' + esc(p.designNumber) + "</p>" : "") +
           "<p>" + esc(p.description) + "</p>" +
           "</div>" +
           "</article>"
@@ -71,7 +72,7 @@
     });
   }
 
-  window.Coral.loadJSON("content/products.json")
+  window.Coral.loadJSON("api/products.php")
     .then(function (products) {
       allProducts = products;
       var categories = Array.from(new Set(products.map(function (p) { return p.category; }))).sort();

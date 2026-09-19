@@ -58,7 +58,7 @@
     var yearEl = document.getElementById("year");
     if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-    window.Coral.loadJSON("content/pages/contact.json")
+    window.Coral.loadJSON("api/content.php?page=contact")
       .then(function (contact) {
         var fab = document.getElementById("whatsappFab");
         if (fab && contact.whatsapp_href) fab.href = contact.whatsapp_href;

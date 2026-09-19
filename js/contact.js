@@ -3,7 +3,7 @@
   var esc = window.Coral.escapeHTML;
 
   /* ---- render contact details from CMS-edited JSON ---- */
-  window.Coral.loadJSON("content/pages/contact.json").then(function (data) {
+  window.Coral.loadJSON("api/content.php?page=contact").then(function (data) {
     var addressEl = document.getElementById("contactAddress");
     var phoneEl = document.getElementById("contactPhone");
     var emailEl = document.getElementById("contactEmail");

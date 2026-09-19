@@ -1,0 +1,11 @@
+# Real database credentials — created once per environment, never committed.
+includes/config.php
+
+# Uploaded product images live on the server, not in git.
+assets/uploads/*
+!assets/uploads/.gitkeep
+
+# Local tooling noise
+.DS_Store
+Thumbs.db
+*.log

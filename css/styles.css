@@ -1463,3 +1463,17 @@ section {
     width: 100%;
   }
 }
+
+/* Design number on the public catalogue (SRS 3.3) */
+.catalog-design {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--secondary);
+  letter-spacing: 0.03em;
+  margin: 0 0 6px;
+}
+
+/* Wholesaler Login entry point in the header (SRS 3.1) */
+.nav-login {
+  background: var(--secondary);
+}
