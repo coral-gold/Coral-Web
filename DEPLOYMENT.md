@@ -18,13 +18,34 @@ and the admin panel edits the data.
 
 ---
 
+## The quick way: the web installer
+
+Once the code is deployed, open **`https://coralgold.in/install.php`** and
+fill in the form. It connects to your database, creates all the tables,
+loads the starting catalogue and website text, saves the settings on the
+server, and sends you on to create your admin login.
+
+You still need to create the database itself first (Step 1 below) — the
+installer needs somewhere to put the tables. After that the installer
+replaces Steps 2 and 3 entirely: no phpMyAdmin, no File Manager.
+
+The installer switches itself off as soon as it succeeds, so run it as soon
+as the site is live rather than leaving it sitting there. You can delete
+`install.php` afterwards if you prefer.
+
+The manual route below does exactly the same thing by hand, if you ever
+need it.
+
+---
+
 ## Order of work
 
-1. **Steps 1–2 below — do these now**, before the site goes to production.
-   They only touch Hostinger, nothing to do with the code.
+1. **Step 1 below — do this now**, before the site goes to production.
+   It only touches Hostinger, nothing to do with the code.
 2. Tell me **"move production"**. I push the code to the `production` branch
    and Hostinger deploys it.
-3. **Steps 3–5 below** — finish the setup on the live site.
+3. Open `install.php` and follow it — or do Steps 2–3 by hand.
+4. **Steps 4–5 below** — admin login and photo uploads.
 
 ---
 
