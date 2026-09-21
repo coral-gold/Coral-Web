@@ -73,21 +73,25 @@ admin_layout_head('Import Stock');
       </form>
     </div>
 
-    <div class="admin-card" style="max-width:500px;margin-top:20px">
-      <h3 style="margin-bottom:8px;font-size:15px;font-weight:bold">Expected Column Format</h3>
-      <p style="font-size:13px;color:#666;margin-bottom:10px">First row must be column headers (case-insensitive):</p>
+    <div class="admin-card" style="max-width:560px;margin-top:20px">
+      <h3 style="margin-bottom:8px;font-size:15px;font-weight:bold">ERP Export Columns</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:10px">
+        Export your ERP stock list as-is. These columns are read (all others are ignored). Column headers are case-insensitive.
+      </p>
       <table class="data-table" style="font-size:13px">
-        <thead><tr><th>Column</th><th>Required?</th><th>Notes</th></tr></thead>
+        <thead><tr><th>ERP Column</th><th>Required?</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td><code>jewel_code</code></td><td><span class="badge badge-red">Required</span></td><td>Unique product identifier (upsert key)</td></tr>
-          <tr><td><code>design_number</code></td><td>Optional</td><td>Falls back to jewel_code</td></tr>
-          <tr><td><code>category</code></td><td>Optional</td><td>Auto-created if new</td></tr>
-          <tr><td><code>gross_weight</code></td><td>Optional</td><td>In grams (decimal)</td></tr>
-          <tr><td><code>net_weight</code></td><td>Optional</td><td>In grams (decimal)</td></tr>
-          <tr><td><code>quantity</code></td><td>Optional</td><td>Integer</td></tr>
-          <tr><td><code>description</code></td><td>Optional</td><td>Free text</td></tr>
+          <tr><td><code>Jewel Code</code></td><td><span class="badge badge-red">Required</span></td><td>Unique identifier — used as upsert key</td></tr>
+          <tr><td><code>Style No</code></td><td>Optional</td><td>Design Number; falls back to Jewel Code</td></tr>
+          <tr><td><code>Category</code></td><td>Optional</td><td>Auto-created if new</td></tr>
+          <tr><td><code>Gr Wt</code></td><td>Optional</td><td>Gross Weight in grams</td></tr>
+          <tr><td><code>Net Wt</code></td><td>Optional</td><td>Net Weight in grams</td></tr>
+          <tr><td><code>Qty</code></td><td>Optional</td><td>Quantity in stock</td></tr>
         </tbody>
       </table>
+      <p style="font-size:12px;color:#999;margin-top:10px">
+        All other columns (Order No, Party Code, Purity Code, etc.) are ignored automatically. Re-importing the same file is safe — records are updated, not duplicated.
+      </p>
     </div>
   </main>
 </div>

@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS parties (
     password_hash VARCHAR(255) NOT NULL,
     company_name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
-    email VARCHAR(100),
     is_active TINYINT DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

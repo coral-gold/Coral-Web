@@ -17,14 +17,24 @@ function import_stock_xlsx(string $filepath): array {
 
     if (empty($rows)) return ['imported' => 0, 'skipped' => 0, 'errors' => ['Empty file']];
 
-    // Normalise headers from first row
-    $headers = array_map(fn($h) => strtolower(trim((string)$h)), $rows[0]);
-    $col     = array_flip($headers);
+    // Normalise headers from first row; map ERP export names to internal names
+    $erp_aliases = [
+        'jewel code'    => 'jewel_code',
+        'style no'      => 'design_number',
+        'style no.'     => 'design_number',
+        'gr wt'         => 'gross_weight',
+        'gross wt'      => 'gross_weight',
+        'net wt'        => 'net_weight',
+        'qty'           => 'quantity',
+    ];
+    $raw_headers = array_map(fn($h) => strtolower(trim((string)$h)), $rows[0]);
+    $headers = array_map(fn($h) => $erp_aliases[$h] ?? $h, $raw_headers);
+    $col = array_flip($headers);
 
     $required = ['jewel_code'];
     foreach ($required as $r) {
         if (!isset($col[$r])) {
-            return ['imported' => 0, 'skipped' => 0, 'errors' => ["Missing required column: {$r}"]];
+            return ['imported' => 0, 'skipped' => 0, 'errors' => ["Missing required column: {$r} (or ERP alias 'Jewel Code')"]];
         }
     }
 

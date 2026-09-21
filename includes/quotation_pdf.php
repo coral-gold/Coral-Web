@@ -17,8 +17,9 @@ function generate_quotation_pdf(int $quotation_id): string {
     $total_pcs   = 0;
     $rows = '';
     foreach ($items as $i => $it) {
-        $total_gross += (float)$it['gross_weight'] * (int)$it['quantity'];
-        $total_net   += (float)$it['net_weight']   * (int)$it['quantity'];
+        $row_gross    = (float)$it['gross_weight'] * (int)$it['quantity'];
+        $total_gross += $row_gross;
+        $total_net   += (float)$it['net_weight'] * (int)$it['quantity'];
         $total_pcs   += (int)$it['quantity'];
         $bg = ($i % 2 === 0) ? '#ffffff' : '#fdf8f0';
         $rows .= '<tr style="background:' . $bg . '">
@@ -27,7 +28,7 @@ function generate_quotation_pdf(int $quotation_id): string {
             <td style="font-weight:700">' . weight($it['gross_weight']) . 'g</td>
             <td>' . weight($it['net_weight']) . 'g</td>
             <td style="text-align:center">' . (int)$it['quantity'] . '</td>
-            <td style="font-weight:700">' . weight($total_gross / max($total_pcs, 1)) . 'g</td>
+            <td style="font-weight:700">' . weight($row_gross) . 'g</td>
         </tr>';
     }
 

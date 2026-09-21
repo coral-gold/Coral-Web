@@ -12,16 +12,18 @@ $err  = '';
 if (is_post()) {
     csrf_verify();
     $name    = trim(post('name'));
+    $company = trim(post('company'));
     $email   = trim(post('email'));
+    $phone   = trim(post('phone'));
     $message = trim(post('message'));
     if (!$name || !$email || !$message) {
-        $err = 'All fields are required.';
+        $err = 'Name, Email and Message are required.';
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $err = 'Please enter a valid email address.';
     } else {
         $to      = $contact_email ?: 'info@coralgold.in';
         $subject = 'Contact enquiry from ' . $name;
-        $body    = "Name: {$name}\nEmail: {$email}\n\nMessage:\n{$message}";
+        $body    = "Name: {$name}\nCompany: {$company}\nEmail: {$email}\nPhone: {$phone}\n\nMessage:\n{$message}";
         $headers = "From: noreply@coralgold.in\r\nReply-To: {$email}";
         mail($to, $subject, $body, $headers);
         $sent = true;
@@ -64,15 +66,23 @@ layout_head('Contact Us');
           <form method="POST">
             <?= csrf_field() ?>
             <div class="form-group">
-              <label>Your Name</label>
+              <label>Your Name *</label>
               <input type="text" name="name" class="form-control" required value="<?= e(post('name')) ?>">
             </div>
             <div class="form-group">
-              <label>Email Address</label>
+              <label>Company</label>
+              <input type="text" name="company" class="form-control" value="<?= e(post('company')) ?>">
+            </div>
+            <div class="form-group">
+              <label>Email Address *</label>
               <input type="email" name="email" class="form-control" required value="<?= e(post('email')) ?>">
             </div>
             <div class="form-group">
-              <label>Message</label>
+              <label>Phone</label>
+              <input type="tel" name="phone" class="form-control" value="<?= e(post('phone')) ?>">
+            </div>
+            <div class="form-group">
+              <label>Message *</label>
               <textarea name="message" class="form-control" rows="5" required><?= e(post('message')) ?></textarea>
             </div>
             <div class="form-submit">

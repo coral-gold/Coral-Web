@@ -45,5 +45,5 @@
 # Prevent directory listing
 Options -Indexes
 
-# Default index
-DirectoryIndex index.html index.php
+# Default index — PHP before static HTML so the app runs
+DirectoryIndex index.php index.html
