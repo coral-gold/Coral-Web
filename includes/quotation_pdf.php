@@ -32,7 +32,9 @@ function generate_quotation_pdf(int $quotation_id): string {
         </tr>';
     }
 
-    $date = date('d M Y', strtotime($q['created_at']));
+    $date      = date('d M Y', strtotime($q['created_at']));
+    $fmt_gross = weight($total_gross);
+    $fmt_net   = weight($total_net);
     $html = <<<HTML
 <!DOCTYPE html>
 <html>
@@ -94,8 +96,8 @@ function generate_quotation_pdf(int $quotation_id): string {
 <div class="totals">
   <table>
     <tr><td class="label">Total Pieces:</td><td class="value">{$total_pcs}</td></tr>
-    <tr><td class="label">Total Gross Weight:</td><td class="value">{$total_gross}g</td></tr>
-    <tr><td class="label">Total Net Weight:</td><td class="value">{$total_net}g</td></tr>
+    <tr><td class="label">Total Gross Weight:</td><td class="value">{$fmt_gross}g</td></tr>
+    <tr><td class="label">Total Net Weight:</td><td class="value">{$fmt_net}g</td></tr>
   </table>
 </div>
 HTML;

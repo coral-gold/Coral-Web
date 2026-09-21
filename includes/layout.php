@@ -6,9 +6,28 @@ function _font_link(): string {
          . '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap">';
 }
 
+function _custom_styles(): string {
+    $garnet = get_content('primary_color');
+    $gold   = get_content('accent_color');
+    $css    = '';
+    if ($garnet) $css .= '--garnet:' . e($garnet) . ';--garnet2:' . e($garnet) . ';';
+    if ($gold)   $css .= '--gold:'   . e($gold)   . ';--gold2:'   . e($gold)   . ';';
+    return $css ? "<style>:root{{$css}}</style>" : '';
+}
+
+function _logo_html(string $fallback, string $href): string {
+    $logo = get_content('site_logo');
+    if ($logo) {
+        $src = url(ltrim($logo, '/'));
+        return '<a class="logo" href="' . $href . '"><img src="' . e($src) . '" alt="Coral Gold" style="height:40px;vertical-align:middle"></a>';
+    }
+    return '<a class="logo" href="' . $href . '">' . $fallback . '</a>';
+}
+
 function layout_head(string $title, string $section = 'public'): void {
-    $cssUrl = url('css/style.css');
-    $fonts  = _font_link();
+    $cssUrl  = url('css/style.css');
+    $fonts   = _font_link();
+    $customs = _custom_styles();
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -18,12 +37,13 @@ function layout_head(string $title, string $section = 'public'): void {
 <title>{$title} – Coral Gold</title>
 {$fonts}
 <link rel="stylesheet" href="{$cssUrl}">
+{$customs}
 </head>
 <body class="section-{$section}">
 HTML;
     if ($section === 'public') {
         echo '<header class="site-header"><div class="container">';
-        echo '<a class="logo" href="' . url() . '">✦ Coral Gold</a>';
+        echo _logo_html('✦ Coral Gold', url());
         echo '<nav>';
         echo '<a href="' . url('public/home.php') . '">Home</a>';
         echo '<a href="' . url('public/about.php') . '">About</a>';
@@ -46,10 +66,12 @@ HTML;
 }
 
 function wholesaler_layout_head(string $title): void {
-    $cssUrl = url('css/style.css');
-    $fonts  = _font_link();
-    $party  = current_party();
-    $count  = cart_count((int)($party['id'] ?? 0));
+    $cssUrl  = url('css/style.css');
+    $fonts   = _font_link();
+    $customs = _custom_styles();
+    $party   = current_party();
+    $count   = cart_count((int)($party['id'] ?? 0));
+    $logoHtml = _logo_html('✦ Coral Gold', 'catalogue.php');
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -59,11 +81,12 @@ function wholesaler_layout_head(string $title): void {
 <title>{$title} – Coral Gold</title>
 {$fonts}
 <link rel="stylesheet" href="{$cssUrl}">
+{$customs}
 </head>
 <body class="section-wholesaler">
 <header class="site-header">
   <div class="container">
-    <a class="logo" href="#">✦ Coral Gold</a>
+    {$logoHtml}
     <nav>
       <a href="catalogue.php">Catalogue</a>
       <a href="my-quotations.php">My Quotations</a>
