@@ -1,2 +1,5 @@
-<?php session_start(); session_destroy(); 
-header('Location: login.php'); exit;
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/../includes/bootstrap.php';
+logout();
+redirect(url('wholesaler/login.php'));

@@ -1,0 +1,20 @@
+# Never commit credentials or generated files
+includes/config.php
+vendor/
+composer.lock
+
+# Uploaded product images
+assets/uploads/*
+!assets/uploads/.gitkeep
+
+# Thumbnail cache
+assets/thumbs/*
+!assets/thumbs/.gitkeep
+
+# OS and editor artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.bak
