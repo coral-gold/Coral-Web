@@ -1,7 +1,5 @@
-# Never commit credentials or generated files
+# Never commit credentials
 includes/config.php
-vendor/
-composer.lock
 
 # Uploaded product images
 assets/uploads/*
