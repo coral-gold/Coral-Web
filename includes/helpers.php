@@ -74,3 +74,14 @@ function weight(mixed $v): string {
     $n = (float)$v;
     return rtrim(rtrim(number_format($n, 3), '0'), '.');
 }
+
+function get_content(string $key, string $default = ''): string {
+    static $cache = null;
+    if ($cache === null) {
+        $cache = [];
+        foreach (db_all('SELECT key_name, value FROM content') as $r) {
+            $cache[$r['key_name']] = (string)$r['value'];
+        }
+    }
+    return $cache[$key] ?? $default;
+}

@@ -11,7 +11,11 @@ $fields = [
     'contact_email'      => ['label' => 'Contact Email',           'type' => 'email'],
     'contact_phone'      => ['label' => 'Contact Phone',           'type' => 'text'],
     'contact_address'    => ['label' => 'Contact Address',         'type' => 'textarea'],
+    'primary_color'      => ['label' => 'Primary Colour (Garnet)', 'type' => 'color'],
+    'accent_color'       => ['label' => 'Accent Colour (Gold)',    'type' => 'color'],
 ];
+
+$err = '';
 
 if (is_post()) {
     csrf_verify();
@@ -19,8 +23,31 @@ if (is_post()) {
         $val = trim(post($key));
         db_run('INSERT INTO content (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?', [$key, $val, $val]);
     }
-    flash('success', 'Content saved.');
-    redirect(url('admin/content.php'));
+
+    // Logo upload
+    if (!empty($_FILES['site_logo']['name'])) {
+        $file = $_FILES['site_logo'];
+        $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['png','jpg','jpeg','gif','svg','webp'], true)) {
+            $err = 'Logo must be an image file (PNG, JPG, GIF, SVG, WebP).';
+        } elseif ($file['size'] > 2 * 1024 * 1024) {
+            $err = 'Logo file must be under 2 MB.';
+        } else {
+            $dest = __DIR__ . '/../assets/uploads/logo.' . $ext;
+            if (move_uploaded_file($file['tmp_name'], $dest)) {
+                $path = 'assets/uploads/logo.' . $ext;
+                db_run('INSERT INTO content (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?',
+                    ['site_logo', $path, $path]);
+            } else {
+                $err = 'Failed to save logo. Check directory permissions.';
+            }
+        }
+    }
+
+    if (!$err) {
+        flash('success', 'Content saved.');
+        redirect(url('admin/content.php'));
+    }
 }
 
 $values = [];
@@ -44,19 +71,34 @@ admin_layout_head('Content');
   <main class="admin-main">
     <h1>Site Content</h1>
     <?= flash_html() ?>
+    <?php if ($err): ?><div class="alert alert-error"><?= e($err) ?></div><?php endif; ?>
     <div class="admin-card" style="max-width:600px">
-      <form method="POST">
+      <form method="POST" enctype="multipart/form-data">
         <?= csrf_field() ?>
         <?php foreach ($fields as $key => $cfg): ?>
         <div class="content-field">
           <label><?= e($cfg['label']) ?></label>
           <?php if ($cfg['type'] === 'textarea'): ?>
             <textarea name="<?= e($key) ?>" class="form-control" rows="4"><?= e($values[$key] ?? '') ?></textarea>
+          <?php elseif ($cfg['type'] === 'color'): ?>
+            <input type="color" name="<?= e($key) ?>" class="form-control" style="height:42px;padding:4px 6px;cursor:pointer"
+                   value="<?= e($values[$key] ?: '#6A1A1A') ?>">
           <?php else: ?>
             <input type="<?= e($cfg['type']) ?>" name="<?= e($key) ?>" class="form-control" value="<?= e($values[$key] ?? '') ?>">
           <?php endif; ?>
         </div>
         <?php endforeach; ?>
+
+        <div class="content-field">
+          <label>Site Logo <small style="color:#999">(PNG/JPG/SVG, max 2 MB)</small></label>
+          <?php if (!empty($values['site_logo'])): ?>
+            <div style="margin-bottom:8px">
+              <img src="<?= e(url($values['site_logo'])) ?>" alt="Current logo" style="max-height:60px;background:#f5f5f5;padding:6px;border-radius:4px">
+            </div>
+          <?php endif; ?>
+          <input type="file" name="site_logo" accept="image/*" class="form-control">
+        </div>
+
         <button type="submit" class="btn btn-primary">Save Changes</button>
       </form>
     </div>

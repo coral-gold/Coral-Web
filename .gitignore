@@ -1,5 +1,14 @@
 # Never commit credentials
 includes/config.php
+.env
+
+# Node
+node_modules/
+client/node_modules/
+client/dist/
+
+# Uploads (runtime)
+uploads/
 
 # Uploaded product images
 assets/uploads/*

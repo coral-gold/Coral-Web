@@ -18,16 +18,13 @@ const Cart = (() => {
     function renderPanel() {
         const body = document.getElementById('panel-body');
         const summary = document.getElementById('panel-summary');
-        const empty = document.getElementById('panel-empty');
         if (!body) return;
 
         if (state.lines.length === 0) {
-            body.innerHTML = '';
-            if (empty) empty.style.display = 'block';
+            body.innerHTML = '<p style="padding:24px;text-align:center;color:#888;font-size:14px">Your quotation list is empty.</p>';
             if (summary) summary.textContent = 'Your quotation is empty.';
             return;
         }
-        if (empty) empty.style.display = 'none';
 
         let totalPcs = 0, totalGross = 0;
         let html = '';
@@ -194,8 +191,9 @@ async function addToCart(productId) {
     const qty = inp ? Math.max(1, parseInt(inp.value || 1)) : 1;
     const btn = document.querySelector(`.product-card[data-pid="${productId}"] .btn-add-cart`);
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Adding…'; }
-    await Cart.add(productId, qty);
+    const d = await Cart.add(productId, qty);
     if (btn) { btn.disabled = false; btn.textContent = 'Add to Quotation'; }
+    if (d && !d.ok) showToast(d.error || 'Could not add item.', true);
 }
 
 // ── Generate quotation
@@ -203,6 +201,10 @@ async function generateQuotation() {
     const notes = document.getElementById('quot-notes')?.value || '';
     const btn = document.getElementById('gen-quot-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generating…'; }
+
+    // Pre-open the window synchronously inside the user-gesture call stack so
+    // browsers don't classify it as an unsolicited popup.
+    const win = window.open('', '_blank');
 
     try {
         const r = await fetch('/api/quotation.php', {
@@ -214,12 +216,15 @@ async function generateQuotation() {
         if (d.ok && d.pdfUrl) {
             closePanel();
             Cart.load();
-            window.open(d.pdfUrl, '_blank');
+            if (win) { win.location.href = d.pdfUrl; }
+            else { window.location.href = d.pdfUrl; }
             showToast('Quotation generated! PDF opened.');
         } else {
+            if (win) win.close();
             showToast(d.error || 'Failed to generate quotation.', true);
         }
     } catch {
+        if (win) win.close();
         showToast('Network error.', true);
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Generate Quotation PDF'; }

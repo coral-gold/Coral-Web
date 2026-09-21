@@ -57,7 +57,7 @@ admin_layout_head('Parties');
     <div class="data-table-wrap">
       <table class="data-table">
         <thead>
-          <tr><th>Party ID</th><th>Company</th><th>Phone</th><th>Email</th><th>Status</th><th>Since</th><th>Actions</th></tr>
+          <tr><th>Party ID</th><th>Company</th><th>Phone</th><th>Status</th><th>Since</th><th>Actions</th></tr>
         </thead>
         <tbody>
           <?php foreach ($parties as $p): ?>
@@ -65,7 +65,6 @@ admin_layout_head('Parties');
             <td><?= e($p['party_id']) ?></td>
             <td><?= e($p['company_name']) ?></td>
             <td><?= e($p['phone'] ?? '') ?></td>
-            <td><?= e($p['email'] ?? '') ?></td>
             <td><?= $p['is_active'] ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Disabled</span>' ?></td>
             <td><?= date('d M Y', strtotime($p['created_at'])) ?></td>
             <td class="actions">
@@ -81,7 +80,7 @@ admin_layout_head('Parties');
             </td>
           </tr>
           <?php endforeach; ?>
-          <?php if (empty($parties)): ?><tr><td colspan="7" style="text-align:center;color:#888">No parties yet.</td></tr><?php endif; ?>
+          <?php if (empty($parties)): ?><tr><td colspan="6" style="text-align:center;color:#888">No parties yet.</td></tr><?php endif; ?>
         </tbody>
       </table>
     </div>

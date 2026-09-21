@@ -17,8 +17,9 @@ function generate_quotation_pdf(int $quotation_id): string {
     $total_pcs   = 0;
     $rows = '';
     foreach ($items as $i => $it) {
-        $total_gross += (float)$it['gross_weight'] * (int)$it['quantity'];
-        $total_net   += (float)$it['net_weight']   * (int)$it['quantity'];
+        $row_gross    = (float)$it['gross_weight'] * (int)$it['quantity'];
+        $total_gross += $row_gross;
+        $total_net   += (float)$it['net_weight'] * (int)$it['quantity'];
         $total_pcs   += (int)$it['quantity'];
         $bg = ($i % 2 === 0) ? '#ffffff' : '#fdf8f0';
         $rows .= '<tr style="background:' . $bg . '">
@@ -27,11 +28,13 @@ function generate_quotation_pdf(int $quotation_id): string {
             <td style="font-weight:700">' . weight($it['gross_weight']) . 'g</td>
             <td>' . weight($it['net_weight']) . 'g</td>
             <td style="text-align:center">' . (int)$it['quantity'] . '</td>
-            <td style="font-weight:700">' . weight($total_gross / max($total_pcs, 1)) . 'g</td>
+            <td style="font-weight:700">' . weight($row_gross) . 'g</td>
         </tr>';
     }
 
-    $date = date('d M Y', strtotime($q['created_at']));
+    $date      = date('d M Y', strtotime($q['created_at']));
+    $fmt_gross = weight($total_gross);
+    $fmt_net   = weight($total_net);
     $html = <<<HTML
 <!DOCTYPE html>
 <html>
@@ -93,8 +96,8 @@ function generate_quotation_pdf(int $quotation_id): string {
 <div class="totals">
   <table>
     <tr><td class="label">Total Pieces:</td><td class="value">{$total_pcs}</td></tr>
-    <tr><td class="label">Total Gross Weight:</td><td class="value">{$total_gross}g</td></tr>
-    <tr><td class="label">Total Net Weight:</td><td class="value">{$total_net}g</td></tr>
+    <tr><td class="label">Total Gross Weight:</td><td class="value">{$fmt_gross}g</td></tr>
+    <tr><td class="label">Total Net Weight:</td><td class="value">{$fmt_net}g</td></tr>
   </table>
 </div>
 HTML;

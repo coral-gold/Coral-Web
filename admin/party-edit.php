@@ -13,7 +13,6 @@ if (is_post()) {
     $pid      = trim(post('party_id'));
     $company  = trim(post('company_name'));
     $phone    = trim(post('phone'));
-    $email    = trim(post('email'));
     $password = post('password');
     $active   = post_int('is_active', 1);
 
@@ -24,12 +23,12 @@ if (is_post()) {
         try {
             if ($party) {
                 $hash = $password ? password_hash($password, PASSWORD_DEFAULT) : $party['password_hash'];
-                db_run('UPDATE parties SET party_id=?,company_name=?,phone=?,email=?,is_active=?,password_hash=? WHERE id=?',
-                    [$pid, $company, $phone, $email, $active, $hash, $id]);
+                db_run('UPDATE parties SET party_id=?,company_name=?,phone=?,is_active=?,password_hash=? WHERE id=?',
+                    [$pid, $company, $phone, $active, $hash, $id]);
                 flash('success', 'Party updated.');
             } else {
-                db_run('INSERT INTO parties (party_id,company_name,phone,email,is_active,password_hash) VALUES (?,?,?,?,?,?)',
-                    [$pid, $company, $phone, $email, $active, password_hash($password, PASSWORD_DEFAULT)]);
+                db_run('INSERT INTO parties (party_id,company_name,phone,is_active,password_hash) VALUES (?,?,?,?,?)',
+                    [$pid, $company, $phone, $active, password_hash($password, PASSWORD_DEFAULT)]);
                 flash('success', 'Party created.');
             }
             redirect(url('admin/parties.php'));
@@ -75,11 +74,6 @@ admin_layout_head($party ? 'Edit Party' : 'Add Party');
           <label>Phone</label>
           <input type="text" name="phone" class="form-control" maxlength="20"
                  value="<?= e($party['phone'] ?? post('phone')) ?>">
-        </div>
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" name="email" class="form-control"
-                 value="<?= e($party['email'] ?? post('email')) ?>">
         </div>
         <div class="form-group">
           <label><?= $party ? 'New Password <small style="color:#999">(leave blank to keep)</small>' : 'Password *' ?></label>
