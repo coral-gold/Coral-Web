@@ -7,7 +7,7 @@
     "start": "node server/index.js",
     "dev": "concurrently \"nodemon server/index.js\" \"npm run client:dev\"",
     "client:dev": "cd client && npm run dev",
-    "build": "cd client && npm run build"
+    "build": "cd client && npm install && npm run build"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
