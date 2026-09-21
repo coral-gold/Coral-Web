@@ -1,8 +1,14 @@
 <?php
 declare(strict_types=1);
 
+function _font_link(): string {
+    return '<link rel="preconnect" href="https://fonts.googleapis.com">'
+         . '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap">';
+}
+
 function layout_head(string $title, string $section = 'public'): void {
     $cssUrl = url('css/style.css');
+    $fonts  = _font_link();
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -10,18 +16,18 @@ function layout_head(string $title, string $section = 'public'): void {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{$title} – Coral Gold</title>
+{$fonts}
 <link rel="stylesheet" href="{$cssUrl}">
 </head>
 <body class="section-{$section}">
 HTML;
-    // Public nav
     if ($section === 'public') {
         echo '<header class="site-header"><div class="container">';
-        echo '<a class="logo" href="' . url() . '">✨ Coral Gold</a>';
+        echo '<a class="logo" href="' . url() . '">✦ Coral Gold</a>';
         echo '<nav>';
         echo '<a href="' . url('public/home.php') . '">Home</a>';
         echo '<a href="' . url('public/about.php') . '">About</a>';
-        echo '<a href="' . url('public/catalog.php') . '">Catalog</a>';
+        echo '<a href="' . url('public/catalog.php') . '">Catalogue</a>';
         echo '<a href="' . url('public/contact.php') . '">Contact</a>';
         echo '<a href="' . url('wholesaler/login.php') . '" class="btn-login">Wholesaler Login</a>';
         echo '</nav></div></header>';
@@ -41,8 +47,9 @@ HTML;
 
 function wholesaler_layout_head(string $title): void {
     $cssUrl = url('css/style.css');
+    $fonts  = _font_link();
     $party  = current_party();
-    $count  = cart_count($party['id'] ?? 0);
+    $count  = cart_count((int)($party['id'] ?? 0));
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -50,12 +57,13 @@ function wholesaler_layout_head(string $title): void {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{$title} – Coral Gold</title>
+{$fonts}
 <link rel="stylesheet" href="{$cssUrl}">
 </head>
 <body class="section-wholesaler">
 <header class="site-header">
   <div class="container">
-    <a class="logo" href="#">✨ Coral Gold</a>
+    <a class="logo" href="#">✦ Coral Gold</a>
     <nav>
       <a href="catalogue.php">Catalogue</a>
       <a href="my-quotations.php">My Quotations</a>
@@ -68,6 +76,7 @@ HTML;
 
 function admin_layout_head(string $title): void {
     $cssUrl = url('css/style.css');
+    $fonts  = _font_link();
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="en">
@@ -75,6 +84,7 @@ function admin_layout_head(string $title): void {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{$title} – Coral Gold Admin</title>
+{$fonts}
 <link rel="stylesheet" href="{$cssUrl}">
 </head>
 <body class="section-admin">
