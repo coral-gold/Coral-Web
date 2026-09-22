@@ -44,7 +44,7 @@ export default function WholesalerLayout({ children }) {
           </nav>
         </div>
       </header>
-      <main style={{ padding: '28px 32px', maxWidth: 1200, margin: '0 auto' }}>
+      <main className="wholesaler-main">
         {children}
       </main>
       <QuotationPanel />

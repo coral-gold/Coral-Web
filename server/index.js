@@ -35,4 +35,26 @@ app.use(express.static(distDir));
 app.get(/.*/, (req, res) => res.sendFile(path.join(distDir, 'index.html')));
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`Coral Gold server running on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Coral Gold server running on http://localhost:${PORT}`);
+
+    const db = require('./db');
+    if (!db.isConfigured()) {
+        console.warn('[DB] Not configured — visit /setup to initialise the database.');
+        return;
+    }
+    db.query('SELECT 1').then(() => {
+        console.log('[DB] Connection OK');
+    }).catch(e => {
+        console.error('[DB] Connection FAILED:', e.message);
+        if (e.code === 'ER_ACCESS_DENIED_ERROR' || e.code === 'ER_DBACCESS_DENIED_ERROR') {
+            console.error('[DB] Fix: grant ALL PRIVILEGES on the database to the user in hPanel → MySQL Databases.');
+        } else if (e.code === 'ECONNREFUSED') {
+            console.error('[DB] Fix: check DB_HOST in .env — connection refused.');
+        } else if (e.code === 'ER_BAD_DB_ERROR') {
+            console.error('[DB] Fix: check DB_NAME in .env — database not found (use lowercase on Hostinger).');
+        } else if (e.code === 'ER_NO_SUCH_TABLE') {
+            console.error('[DB] Fix: visit /setup to initialise the schema.');
+        }
+    });
+});

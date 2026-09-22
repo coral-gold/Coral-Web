@@ -32,7 +32,7 @@ export default function AdminLayout({ children }) {
       <header className="admin-header">
         <div className="container">
           <NavLink className="logo" to="/admin/dashboard">⚙ Coral Gold Admin</NavLink>
-          <nav>
+          <nav className="admin-header-nav">
             {NAV.map(n => <NavLink key={n.to} to={n.to}>{n.label}</NavLink>)}
             <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#c8b8a8', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
               Logout
@@ -40,6 +40,14 @@ export default function AdminLayout({ children }) {
           </nav>
         </div>
       </header>
+      <nav className="admin-mobile-nav">
+        {NAV.map(n => (
+          <NavLink key={n.to} to={n.to} className={({ isActive }) => isActive ? 'active' : ''}>
+            {n.label}
+          </NavLink>
+        ))}
+        <button onClick={handleLogout}>Logout</button>
+      </nav>
       <div className="admin-layout">
         <nav className="admin-sidebar">
           {NAV.map(n => (
