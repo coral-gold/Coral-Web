@@ -26,12 +26,14 @@ export default function Content() {
     e.preventDefault();
     setSaving(true);
     const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => fd.append(k, v || ''));
-    if (logoFile) fd.append('logo', logoFile);
+    Object.entries(form).forEach(([k, v]) => { if (k !== 'site_logo') fd.append(k, v || ''); });
+    if (logoFile) fd.append('site_logo', logoFile);
     const d = await api.form('/admin/content', fd);
     setSaving(false);
-    if (d.ok) show('Content saved');
-    else show(d.error || 'Failed', 'error');
+    if (d.ok) {
+      if (d.logo_url) setForm(f => ({ ...f, site_logo: d.logo_url }));
+      show('Content saved');
+    } else show(d.error || 'Failed', 'error');
   }
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -56,9 +58,12 @@ export default function Content() {
 
         <div className="admin-card" style={{ marginTop: 16 }}>
           <h3 style={{ marginBottom: 16 }}>Logo</h3>
-          {form.logo_url && (
+          {form.site_logo && (
             <div style={{ marginBottom: 12 }}>
-              <img src={form.logo_url} alt="Logo" style={{ height: 48, objectFit: 'contain', background: '#333', padding: 4 }} />
+              <img src={form.site_logo} alt="Logo" style={{ height: 48, objectFit: 'contain', background: '#333', padding: 4 }} />
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--mid)', wordBreak: 'break-all' }}>
+                URL: <code>{window.location.origin}{form.site_logo}</code>
+              </div>
             </div>
           )}
           <div className="form-group">

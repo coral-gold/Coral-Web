@@ -3,7 +3,7 @@ import AdminLayout from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
 
-const EMPTY = { partyId: '', name: '', password: '', phone: '', email: '' };
+const EMPTY = { party_id: '', company_name: '', password: '', phone: '' };
 
 export default function Parties() {
   const [parties, setParties] = useState([]);
@@ -22,7 +22,7 @@ export default function Parties() {
 
   function openAdd() { setForm(EMPTY); setEditId(null); setModal(true); }
   function openEdit(p) {
-    setForm({ partyId: p.party_id, name: p.name, password: '', phone: p.phone || '', email: p.email || '' });
+    setForm({ party_id: p.party_id, company_name: p.company_name, password: '', phone: p.phone || '' });
     setEditId(p.id); setModal(true);
   }
 
@@ -64,15 +64,17 @@ export default function Parties() {
       <div className="table-wrap">
         <table className="admin-table">
           <thead>
-            <tr><th>Party ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th></th></tr>
+            <tr><th>Party ID</th><th>Company Name</th><th>Phone</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
+            {parties.length === 0 && (
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No parties yet.</td></tr>
+            )}
             {parties.map(p => (
               <tr key={p.id}>
                 <td><strong>{p.party_id}</strong></td>
-                <td>{p.name}</td>
+                <td>{p.company_name}</td>
                 <td>{p.phone || '—'}</td>
-                <td>{p.email || '—'}</td>
                 <td>
                   <span className={`badge ${p.is_active ? 'badge-success' : 'badge-muted'}`}>
                     {p.is_active ? 'Active' : 'Inactive'}
@@ -101,26 +103,20 @@ export default function Parties() {
               <div className="form-row-2">
                 <div className="form-group">
                   <label>Party ID *</label>
-                  <input className="form-control" required value={form.partyId} onChange={set('partyId')} disabled={!!editId} />
+                  <input className="form-control" required value={form.party_id} onChange={set('party_id')} disabled={!!editId} />
                 </div>
                 <div className="form-group">
-                  <label>Name *</label>
-                  <input className="form-control" required value={form.name} onChange={set('name')} />
+                  <label>Company Name *</label>
+                  <input className="form-control" required value={form.company_name} onChange={set('company_name')} />
                 </div>
               </div>
               <div className="form-group">
                 <label>Password {editId ? '(leave blank to keep)' : '*'}</label>
                 <input className="form-control" type="password" required={!editId} value={form.password} onChange={set('password')} autoComplete="new-password" />
               </div>
-              <div className="form-row-2">
-                <div className="form-group">
-                  <label>Phone</label>
-                  <input className="form-control" value={form.phone} onChange={set('phone')} />
-                </div>
-                <div className="form-group">
-                  <label>Email</label>
-                  <input className="form-control" type="email" value={form.email} onChange={set('email')} />
-                </div>
+              <div className="form-group">
+                <label>Phone</label>
+                <input className="form-control" value={form.phone} onChange={set('phone')} />
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-outline" onClick={() => setModal(false)}>Cancel</button>

@@ -86,7 +86,7 @@ router.get('/products', async (req, res) => {
             `SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON c.id = p.category_id ${where} ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
-        res.json({ ok: true, products: rows, total, pages: Math.ceil(total / per) });
+        res.json({ ok: true, products: rows, total, pages: Math.ceil(total / per), hasMore: offset + rows.length < total });
     } catch (e) { res.status(500).json({ ok: false }); }
 });
 
@@ -270,6 +270,13 @@ router.put('/parties/:id', async (req, res) => {
     } catch (e) { res.json({ ok: false, error: 'Party ID already exists.' }); }
 });
 
+router.delete('/parties/:id', async (req, res) => {
+    try {
+        await db.query('DELETE FROM parties WHERE id = ?', [req.params.id]);
+        res.json({ ok: true });
+    } catch (e) { res.json({ ok: false, error: 'Cannot delete party.' }); }
+});
+
 router.patch('/parties/:id/toggle', async (req, res) => {
     const [[p]] = await db.query('SELECT is_active FROM parties WHERE id = ?', [req.params.id]);
     if (!p) return res.json({ ok: false });
@@ -355,14 +362,16 @@ router.post('/content', imageUpload.single('site_logo'), async (req, res) => {
                 );
             }
         }
+        let logo_url = null;
         if (req.file) {
-            const p = 'assets/uploads/' + req.file.filename;
+            const p = '/uploads/' + req.file.filename;
             await db.query(
                 'INSERT INTO content (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?',
                 ['site_logo', p, p]
             );
+            logo_url = p;
         }
-        res.json({ ok: true });
+        res.json({ ok: true, logo_url });
     } catch (e) { console.error(e); res.status(500).json({ ok: false }); }
 });
 
