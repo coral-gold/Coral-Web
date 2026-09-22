@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './components/Toast';
@@ -37,21 +37,19 @@ function AdminRoute({ children }) {
 
 function SetupGate({ children }) {
   const [checked, setChecked] = useState(false);
-  const navigate   = useNavigate();
-  const location   = useLocation();
 
   useEffect(() => {
-    if (location.pathname === '/setup') { setChecked(true); return; }
+    if (window.location.pathname === '/setup') { setChecked(true); return; }
     fetch('/api/setup/status')
       .then(r => r.json())
       .then(d => {
-        if (!d.configured) navigate('/setup', { replace: true });
+        if (!d.configured) window.location.replace('/setup');
         else setChecked(true);
       })
-      .catch(() => setChecked(true)); // on network error, let the app load normally
+      .catch(() => setChecked(true));
   }, []);
 
-  if (!checked && location.pathname !== '/setup') return null;
+  if (!checked && window.location.pathname !== '/setup') return null;
   return children;
 }
 
