@@ -20,6 +20,7 @@ app.use(session({
 app.use('/uploads', express.static(path.join(__dirname, '../assets/uploads')));
 
 // API routes
+app.use('/api/health',    require('./routes/health'));
 app.use('/api/setup',     require('./routes/setup'));
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/public',    require('./routes/public'));

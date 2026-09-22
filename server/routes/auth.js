@@ -3,6 +3,21 @@ const router  = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const db      = require('../db');
 
+function dbErrorMessage(e) {
+    const m = e.message || '';
+    if (m.startsWith('Database not configured'))
+        return 'Database not configured. Please visit /setup to complete setup.';
+    if (e.code === 'ECONNREFUSED')
+        return `DB connection refused (${e.address || 'host'}). Check DB_HOST / DB_PORT.`;
+    if (e.code === 'ER_ACCESS_DENIED_ERROR')
+        return 'DB access denied. Check DB_USER / DB_PASS.';
+    if (e.code === 'ER_BAD_DB_ERROR')
+        return `Database "${e.sqlMessage?.match(/'([^']+)'/)?.[1] || 'unknown'}" does not exist. Check DB_NAME.`;
+    if (e.code === 'ER_NO_SUCH_TABLE')
+        return 'Database tables not found. Visit /setup to initialise the schema.';
+    return `Server error: ${m}`;
+}
+
 // ── Party ─────────────────────────────────────────────────────────────────────
 
 router.get('/party/me', (req, res) => {
@@ -39,8 +54,9 @@ router.post('/party/login', async (req, res) => {
         req.session.party   = { id: party.id, partyId: party.party_id, companyName: party.company_name };
         res.json({ ok: true });
     } catch (e) {
-        console.error(e);
-        res.json({ ok: false, error: 'Server error.' });
+        console.error('[party/login]', e.message);
+        const msg = dbErrorMessage(e);
+        res.json({ ok: false, error: msg });
     }
 });
 
@@ -80,8 +96,9 @@ router.post('/admin/login', async (req, res) => {
         req.session.admin   = { id: admin.id, username: admin.username };
         res.json({ ok: true });
     } catch (e) {
-        console.error(e);
-        res.json({ ok: false, error: 'Server error.' });
+        console.error('[admin/login]', e.message);
+        const msg = dbErrorMessage(e);
+        res.json({ ok: false, error: msg });
     }
 });
 
