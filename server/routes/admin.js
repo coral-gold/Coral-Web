@@ -145,26 +145,32 @@ const ERP_ALIASES = {
     'gross wt':     'gross_weight',
     'net wt':       'net_weight',
     'qty':          'quantity',
+    'descr':        'description',
+    'description':  'description',
+    'remark':       'description',
 };
 
-router.post('/import', xlsxUpload.single('xlsx'), async (req, res) => {
+router.post('/import', xlsxUpload.single('file'), async (req, res) => {
     if (!req.file) return res.json({ ok: false, error: 'No file uploaded.' });
     try {
         const wb    = XLSX.read(req.file.buffer, { type: 'buffer' });
         const ws    = wb.Sheets[wb.SheetNames[0]];
         const data  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-        if (data.length < 2) return res.json({ ok: true, imported: 0, skipped: 0, errors: [] });
+        if (data.length < 2) return res.json({ ok: true, inserted: 0, updated: 0, skipped: 0, errors: [] });
 
         const rawHeaders = data[0].map(h => String(h).toLowerCase().trim());
         const headers    = rawHeaders.map(h => ERP_ALIASES[h] || h);
         const col        = Object.fromEntries(headers.map((h, i) => [h, i]));
 
         if (col.jewel_code === undefined) {
-            return res.json({ ok: false, error: 'Required column "Jewel Code" not found.' });
+            return res.json({ ok: false, error: 'Required column "Jewel Code" not found in this file.' });
         }
 
-        let imported = 0, skipped = 0;
+        let inserted = 0, updated = 0, skipped = 0;
         const errors = [];
+
+        // Cache category name → id to avoid re-querying on every row
+        const catCache = {};
 
         for (let r = 1; r < data.length; r++) {
             const row       = data[r];
@@ -176,42 +182,49 @@ router.post('/import', xlsxUpload.single('xlsx'), async (req, res) => {
             const grossWt   = col.gross_weight !== undefined  ? parseFloat(row[col.gross_weight]) || null   : null;
             const netWt     = col.net_weight !== undefined    ? parseFloat(row[col.net_weight])   || null   : null;
             const qty       = col.quantity !== undefined      ? parseInt(row[col.quantity])        || 0      : 0;
+            const descr     = col.description !== undefined   ? String(row[col.description] ?? '').trim() || null : null;
 
             try {
-                let catId = null;
-                if (catName) {
-                    await db.query('INSERT IGNORE INTO categories (name) VALUES (?)', [catName]);
-                    const [[cat]] = await db.query('SELECT id FROM categories WHERE name = ?', [catName]);
-                    catId = cat?.id || null;
-                }
+                let catId = catCache[catName] ?? null;
                 if (!catId) {
-                    const [[def]] = await db.query('SELECT id FROM categories ORDER BY id LIMIT 1');
-                    catId = def?.id;
-                }
-                if (!catId) {
-                    await db.query('INSERT IGNORE INTO categories (name) VALUES (?)', ['General']);
-                    const [[cat]] = await db.query("SELECT id FROM categories WHERE name='General'");
-                    catId = cat.id;
+                    if (catName) {
+                        await db.query('INSERT IGNORE INTO categories (name) VALUES (?)', [catName]);
+                        const [[cat]] = await db.query('SELECT id FROM categories WHERE name = ?', [catName]);
+                        catId = cat?.id || null;
+                    }
+                    if (!catId) {
+                        const [[def]] = await db.query('SELECT id FROM categories ORDER BY id LIMIT 1');
+                        catId = def?.id;
+                    }
+                    if (!catId) {
+                        await db.query('INSERT IGNORE INTO categories (name) VALUES (?)', ['General']);
+                        const [[cat]] = await db.query("SELECT id FROM categories WHERE name='General'");
+                        catId = cat.id;
+                    }
+                    catCache[catName] = catId;
                 }
 
-                await db.query(
-                    `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, quantity)
-                     VALUES (?,?,?,?,?,?)
+                const [r2] = await db.query(
+                    `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, quantity, description)
+                     VALUES (?,?,?,?,?,?,?)
                      ON DUPLICATE KEY UPDATE
-                       category_id = VALUES(category_id),
+                       category_id   = VALUES(category_id),
                        design_number = VALUES(design_number),
                        gross_weight  = VALUES(gross_weight),
                        net_weight    = VALUES(net_weight),
-                       quantity      = VALUES(quantity)`,
-                    [catId, designNo || jewelCode, jewelCode, grossWt, netWt, qty]
+                       quantity      = VALUES(quantity),
+                       description   = VALUES(description)`,
+                    [catId, designNo || jewelCode, jewelCode, grossWt, netWt, qty, descr]
                 );
-                imported++;
+                // affectedRows: 1 = new insert, 2 = updated existing, 0 = no change
+                if (r2.affectedRows >= 2) updated++;
+                else inserted++;
             } catch (e) {
                 errors.push(`Row ${r + 1} (${jewelCode}): ${e.message}`);
                 skipped++;
             }
         }
-        res.json({ ok: true, imported, skipped, errors });
+        res.json({ ok: true, inserted, updated, skipped, errors });
     } catch (e) {
         console.error(e);
         res.json({ ok: false, error: 'Failed to parse file: ' + e.message });
