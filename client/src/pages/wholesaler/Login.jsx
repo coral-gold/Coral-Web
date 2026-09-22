@@ -31,7 +31,16 @@ export default function WholesalerLogin() {
         <div className="login-box">
           <div className="logo">✦ Coral Gold</div>
           <h2>Wholesaler Portal</h2>
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && (
+            <div className="alert alert-error">
+              {error}
+              {(error.includes('not configured') || error.includes('Server error') || error.includes('connection')) && (
+                <div style={{ marginTop: 8, fontSize: 13 }}>
+                  → <a href="/api/health" target="_blank" rel="noreferrer" style={{ color: 'inherit', fontWeight: 600 }}>View Diagnostics</a>
+                </div>
+              )}
+            </div>
+          )}
           <form onSubmit={submit}>
             <div className="form-group">
               <label>Party ID</label>

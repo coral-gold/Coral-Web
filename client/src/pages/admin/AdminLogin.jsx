@@ -31,7 +31,18 @@ export default function AdminLogin() {
         <div className="login-box">
           <div className="logo">✦ Coral Gold</div>
           <h2>Admin Panel</h2>
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && (
+            <div className="alert alert-error">
+              {error}
+              {(error.includes('not configured') || error.includes('Server error') || error.includes('connection')) && (
+                <div style={{ marginTop: 8, fontSize: 13 }}>
+                  → <a href="/setup" style={{ color: 'inherit', fontWeight: 600 }}>Run Setup Wizard</a>
+                  &nbsp;·&nbsp;
+                  <a href="/api/health" target="_blank" rel="noreferrer" style={{ color: 'inherit', fontWeight: 600 }}>View Diagnostics</a>
+                </div>
+              )}
+            </div>
+          )}
           <form onSubmit={submit}>
             <div className="form-group">
               <label>Username</label>
