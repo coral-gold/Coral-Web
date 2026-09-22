@@ -9,10 +9,10 @@ function dbErrorMessage(e) {
         return 'Database not configured. Please visit /setup to complete setup.';
     if (e.code === 'ECONNREFUSED')
         return `DB connection refused (${e.address || 'host'}). Check DB_HOST / DB_PORT.`;
-    if (e.code === 'ER_ACCESS_DENIED_ERROR')
-        return 'DB access denied. Check DB_USER / DB_PASS.';
+    if (e.code === 'ER_ACCESS_DENIED_ERROR' || e.code === 'ER_DBACCESS_DENIED_ERROR')
+        return `DB access denied (${e.code}). In Hostinger hPanel → Databases → MySQL Databases, add the user to the database and grant All Privileges. Also ensure DB_NAME matches the exact lowercase name shown in hPanel.`;
     if (e.code === 'ER_BAD_DB_ERROR')
-        return `Database "${e.sqlMessage?.match(/'([^']+)'/)?.[1] || 'unknown'}" does not exist. Check DB_NAME.`;
+        return `Database "${e.sqlMessage?.match(/'([^']+)'/)?.[1] || 'unknown'}" does not exist. Check DB_NAME — Hostinger database names are lowercase.`;
     if (e.code === 'ER_NO_SUCH_TABLE')
         return 'Database tables not found. Visit /setup to initialise the schema.';
     return `Server error: ${m}`;

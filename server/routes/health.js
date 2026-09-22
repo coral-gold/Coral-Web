@@ -28,7 +28,11 @@ router.get('/', async (req, res) => {
         await db.query('SELECT 1');
         report.db_connect = true;
     } catch (e) {
-        report.error = `DB connection failed: ${e.message}`;
+        const hint =
+            e.code === 'ER_DBACCESS_DENIED_ERROR' || e.code === 'ER_ACCESS_DENIED_ERROR'
+                ? ' → In Hostinger hPanel, add the DB user to the database and grant All Privileges. Also check DB_NAME is lowercase.'
+                : e.code === 'ECONNREFUSED' ? ' → Check DB_HOST value.' : '';
+        report.error = `DB connection failed (${e.code || 'ERR'}): ${e.message}${hint}`;
         return res.json(report);
     }
 
