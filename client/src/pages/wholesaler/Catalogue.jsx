@@ -31,10 +31,10 @@ function ProductCard({ product, inCart }) {
         <div className="qty-stepper">
           <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
           <input
-            type="number" min="1" max={product.stock} value={qty}
-            onChange={e => setQty(Math.max(1, Math.min(product.stock, parseInt(e.target.value) || 1)))}
+            type="number" min="1" value={qty}
+            onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
           />
-          <button type="button" onClick={() => setQty(q => Math.min(product.stock, q + 1))}>+</button>
+          <button type="button" onClick={() => setQty(q => q + 1)}>+</button>
         </div>
         <button
           type="button" className="btn btn-primary btn-sm btn-add-cart"

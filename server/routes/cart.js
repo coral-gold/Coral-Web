@@ -37,10 +37,8 @@ router.post('/', async (req, res) => {
 
     try {
         if (action === 'add') {
-            const [[prod]] = await db.query('SELECT quantity FROM products WHERE id = ?', [productId]);
-            if (!prod || prod.quantity < 1) {
-                return res.json({ ok: false, error: 'Item out of stock.' });
-            }
+            const [[prod]] = await db.query('SELECT id FROM products WHERE id = ?', [productId]);
+            if (!prod) return res.json({ ok: false, error: 'Product not found.' });
             const addQty = Math.max(1, parseInt(qty) || 1);
             await db.query(
                 `INSERT INTO cart_items (party_id, product_id, quantity) VALUES (?,?,?)

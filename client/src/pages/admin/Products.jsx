@@ -3,7 +3,7 @@ import AdminLayout from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
 
-const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', quantity: '', description: '' };
+const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', description: '' };
 
 export default function Products() {
   const [products,   setProducts]   = useState([]);
@@ -47,7 +47,6 @@ export default function Products() {
       category_id:   String(p.category_id || ''),
       gross_weight:  p.gross_weight  || '',
       net_weight:    p.net_weight    || '',
-      quantity:      p.quantity      ?? '',
       description:   p.description   || '',
     });
     setEditId(p.id); setImageFile(null); setModal(true);
@@ -95,11 +94,11 @@ export default function Products() {
       <div className="table-wrap">
         <table className="admin-table">
           <thead>
-            <tr><th>Image</th><th>Design No.</th><th>Jewel Code</th><th>Category</th><th>Gross Wt.</th><th>Net Wt.</th><th>Qty</th><th></th></tr>
+            <tr><th>Image</th><th>Design No.</th><th>Jewel Code</th><th>Category</th><th>Gross Wt.</th><th>Net Wt.</th><th></th></tr>
           </thead>
           <tbody>
             {products.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No products yet.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No products yet.</td></tr>
             )}
             {products.map(p => (
               <tr key={p.id}>
@@ -109,7 +108,6 @@ export default function Products() {
                 <td>{p.category_name}</td>
                 <td>{p.gross_weight ? parseFloat(p.gross_weight).toFixed(3) + 'g' : '—'}</td>
                 <td>{p.net_weight   ? parseFloat(p.net_weight).toFixed(3)   + 'g' : '—'}</td>
-                <td>{p.quantity}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="btn btn-sm btn-outline" onClick={() => openEdit(p)}>Edit</button>
                   {' '}
@@ -161,10 +159,6 @@ export default function Products() {
                   <label>Net Weight (g) *</label>
                   <input className="form-control" type="number" step="0.001" required value={form.net_weight} onChange={setF('net_weight')} />
                 </div>
-              </div>
-              <div className="form-group">
-                <label>Qty <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(optional)</span></label>
-                <input className="form-control" type="number" min="0" value={form.quantity} onChange={setF('quantity')} placeholder="0" />
               </div>
               <div className="form-group">
                 <label>Description</label>
