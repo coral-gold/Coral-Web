@@ -13,7 +13,7 @@ async function cartPayload(partyId) {
                 p.gross_weight AS grossWeight, p.net_weight AS netWeight,
                 p.image_path AS image
          FROM cart_items ci JOIN products p ON p.id = ci.product_id
-         WHERE ci.party_id = ? ORDER BY ci.created_at`,
+         WHERE ci.party_id = ? AND p.active = 1 ORDER BY ci.created_at`,
         [partyId]
     );
     const lines = rows.map(r => ({
@@ -38,7 +38,7 @@ router.post('/', async (req, res) => {
 
     try {
         if (action === 'add') {
-            const [[prod]] = await db.query('SELECT id FROM products WHERE id = ?', [productId]);
+            const [[prod]] = await db.query('SELECT id FROM products WHERE id = ? AND active = 1', [productId]);
             if (!prod) return res.json({ ok: false, error: 'Product not found.' });
             const addQty = Math.max(1, parseInt(qty) || 1);
             await db.query(

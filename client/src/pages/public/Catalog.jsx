@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import PublicLayout from '../../components/PublicLayout';
+import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
 export default function Catalog() {
@@ -10,6 +11,7 @@ export default function Catalog() {
   const [page,       setPage]       = useState(1);
   const [hasMore,    setHasMore]    = useState(false);
   const [loading,    setLoading]    = useState(false);
+  const openImage = useLightbox();
   const debounce = useRef(null);
 
   useEffect(() => {
@@ -77,7 +79,7 @@ export default function Catalog() {
             {products.map(p => (
               <div key={p.id} className="pub-card">
                 {p.image
-                  ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" />
+                  ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" onClick={() => openImage(p.image)} style={{ cursor: 'zoom-in' }} />
                   : <div className="pub-card-img-placeholder">💍</div>
                 }
                 <div className="pub-card-body">

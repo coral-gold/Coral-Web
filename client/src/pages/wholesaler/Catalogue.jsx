@@ -2,11 +2,13 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import WholesalerLayout from '../../components/WholesalerLayout';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/Toast';
+import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
 function ProductCard({ product, inCart }) {
   const { add, cart, setPanelOpen } = useCart();
   const { show } = useToast();
+  const openImage = useLightbox();
   const [qty,     setQty]     = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -21,7 +23,7 @@ function ProductCard({ product, inCart }) {
   return (
     <div className={`product-card${inCart ? ' in-cart' : ''}`}>
       {product.image
-        ? <img src={product.image} className="product-card-img" alt={product.designNo} loading="lazy" />
+        ? <img src={product.image} className="product-card-img" alt={product.designNo} loading="lazy" onClick={() => openImage(product.image)} style={{ cursor: 'zoom-in' }} />
         : <div className="product-card-placeholder">💍</div>
       }
       <div className="product-card-body">

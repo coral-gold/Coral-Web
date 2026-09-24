@@ -150,13 +150,13 @@ router.get('/products', async (req, res) => {
     const sortCol = PRODUCT_SORT_COLS[req.query.sort] || 'p.created_at';
     const sortDir = req.query.order === 'asc' ? 'ASC' : 'DESC';
 
-    const conds = [], params = [];
+    const conds = ['p.active = 1'], params = [];
     if (search) {
         conds.push('(p.design_number LIKE ? OR p.jewel_code LIKE ? OR c.name LIKE ?)');
         const l = `%${search}%`;
         params.push(l, l, l);
     }
-    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const where = 'WHERE ' + conds.join(' AND ');
     try {
         const [[{ total }]] = await db.query(
             `SELECT COUNT(*) AS total FROM products p JOIN categories c ON c.id = p.category_id ${where}`, params
@@ -168,6 +168,26 @@ router.get('/products', async (req, res) => {
         const products = rows.map(p => ({ ...p, image_url: storage.getPublicUrl(p.image_path) }));
         res.json({ ok: true, products, total, pages: Math.max(1, Math.ceil(total / per)), hasMore: offset + rows.length < total });
     } catch (e) { res.status(500).json({ ok: false }); }
+});
+
+// "Select all N matching" for bulk actions — returns every product id
+// matching the current search, ignoring pagination, so the client can select
+// products on pages it hasn't fetched yet.
+router.get('/products/ids', async (req, res) => {
+    const search = (req.query.q || '').trim();
+    const conds = ['active = 1'], params = [];
+    if (search) {
+        conds.push('(design_number LIKE ? OR jewel_code LIKE ? OR category_id IN (SELECT id FROM categories WHERE name LIKE ?))');
+        const l = `%${search}%`;
+        params.push(l, l, l);
+    }
+    try {
+        const [rows] = await db.query(`SELECT id FROM products WHERE ${conds.join(' AND ')}`, params);
+        res.json({ ok: true, ids: rows.map(r => r.id) });
+    } catch (e) {
+        console.error('[products ids]', e);
+        res.status(500).json({ ok: false });
+    }
 });
 
 router.get('/products/:id', async (req, res) => {
@@ -231,12 +251,31 @@ router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
     }
 });
 
+// Products referenced by a past quotation can't be hard-deleted (FK
+// constraint — quotation history must never break). Try a real delete first
+// since most deleted products were never actually quoted; only fall back to
+// soft-delete (active=0, hidden from catalogue/lists but kept for history)
+// when the product genuinely has quotation history. Never surfaces the raw
+// SQL/FK error to the admin.
 router.delete('/products/:id', async (req, res) => {
+    const id = req.params.id;
     try {
-        const [r] = await db.query('DELETE FROM products WHERE id = ?', [req.params.id]);
+        const [[ref]] = await db.query('SELECT COUNT(*) AS c FROM quotation_items WHERE product_id = ?', [id]);
+        if (ref.c > 0) {
+            const [r] = await db.query('UPDATE products SET active = 0 WHERE id = ?', [id]);
+            if (r.affectedRows === 0) return res.json({ ok: false, error: 'Product not found.' });
+            return res.json({ ok: true, softDeleted: true });
+        }
+        const [r] = await db.query('DELETE FROM products WHERE id = ?', [id]);
         if (r.affectedRows === 0) return res.json({ ok: false, error: 'Product not found.' });
         res.json({ ok: true });
     } catch (e) {
+        if (e.code === 'ER_ROW_IS_REFERENCED_2' || e.code === 'ER_ROW_IS_REFERENCED') {
+            // Race: a quotation was created between the check above and the delete.
+            const [r] = await db.query('UPDATE products SET active = 0 WHERE id = ?', [id]).catch(() => [{ affectedRows: 0 }]);
+            if (r.affectedRows > 0) return res.json({ ok: true, softDeleted: true });
+            return res.json({ ok: false, error: 'This product is used in past quotations and can\'t be permanently deleted.' });
+        }
         console.error('[products delete]', e);
         res.json({ ok: false, error: 'Failed to delete product: ' + e.message });
     }
@@ -253,8 +292,25 @@ router.post('/products/bulk', async (req, res) => {
 
     try {
         if (action === 'delete') {
-            await db.query(`DELETE FROM products WHERE id IN (${ph})`, safeIds);
-            return res.json({ ok: true, affected: safeIds.length });
+            // Split: products with quotation history are soft-deleted (kept for
+            // history, hidden from catalogue/lists); the rest are removed outright.
+            const [refRows] = await db.query(
+                `SELECT DISTINCT product_id FROM quotation_items WHERE product_id IN (${ph})`,
+                safeIds
+            );
+            const referenced   = new Set(refRows.map(r => r.product_id));
+            const softIds      = safeIds.filter(id => referenced.has(id));
+            const hardIds      = safeIds.filter(id => !referenced.has(id));
+
+            if (hardIds.length) {
+                const hph = hardIds.map(() => '?').join(',');
+                await db.query(`DELETE FROM products WHERE id IN (${hph})`, hardIds);
+            }
+            if (softIds.length) {
+                const sph = softIds.map(() => '?').join(',');
+                await db.query(`UPDATE products SET active = 0 WHERE id IN (${sph})`, softIds);
+            }
+            return res.json({ ok: true, affected: safeIds.length, hardDeleted: hardIds.length, softDeleted: softIds.length });
         }
         if (action === 'change_category') {
             const catId = Number(category_id);
@@ -554,11 +610,14 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                 );
                 updated++;
             } else if (strat === 'replace') {
-                await db.query('DELETE FROM products WHERE id = ?', [existing.id]);
+                // Overwrite every field unconditionally — same end state as
+                // delete+insert, but as an UPDATE-in-place: keeps the same row
+                // (and id), so it can never hit the quotation_items foreign key
+                // constraint even when this product has quotation history.
                 await db.query(
-                    `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, description)
-                     VALUES (?,?,?,?,?,?)`,
-                    [catId, finalDesign, jewelCode, grossWt, netWt, descr]
+                    `UPDATE products SET category_id = ?, jewel_code = ?, gross_weight = ?, net_weight = ?, description = ?
+                     WHERE id = ?`,
+                    [catId, jewelCode, grossWt, netWt, descr, existing.id]
                 );
                 updated++;
             }

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
+import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
 const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', description: '' };
@@ -31,9 +32,12 @@ export default function Products() {
   const [form,          setForm]          = useState(EMPTY);
   const [editId,        setEditId]        = useState(null);
   const [imageFile,     setImageFile]     = useState(null);
+  const [editImageUrl,  setEditImageUrl]  = useState(null);
   const [saving,        setSaving]        = useState(false);
   // Bulk
   const [selected,      setSelected]      = useState(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false); // true once "select all N matching" is applied
+  const [selectingAll,  setSelectingAll]  = useState(false);
   const [bulkAction,    setBulkAction]    = useState('');
   const [bulkCatId,     setBulkCatId]     = useState('');
   const [bulkSaving,    setBulkSaving]    = useState(false);
@@ -42,6 +46,7 @@ export default function Products() {
   const [qeForm,        setQeForm]        = useState({});
   const [qeSaving,      setQeSaving]      = useState(false);
   const { show } = useToast();
+  const openImage = useLightbox();
   const debounce = useRef(null);
 
   // ── Data loading ──────────────────────────────────────────────────────────
@@ -60,6 +65,7 @@ export default function Products() {
       setPages(d.pages || 1);
       setTotal(d.total || 0);
       setSelected(new Set());
+      setSelectAllMatching(false);
     }
   }
 
@@ -85,7 +91,7 @@ export default function Products() {
 
   // ── Full edit modal ───────────────────────────────────────────────────────
 
-  function openAdd() { setForm(EMPTY); setEditId(null); setImageFile(null); setModal(true); }
+  function openAdd() { setForm(EMPTY); setEditId(null); setImageFile(null); setEditImageUrl(null); setModal(true); }
   function openEdit(p) {
     setForm({
       design_number: p.design_number || '',
@@ -95,7 +101,7 @@ export default function Products() {
       net_weight:    p.net_weight    || '',
       description:   p.description   || '',
     });
-    setEditId(p.id); setImageFile(null); setModal(true);
+    setEditId(p.id); setImageFile(null); setEditImageUrl(p.image_url || null); setModal(true);
   }
 
   async function submit(e) {
@@ -115,8 +121,10 @@ export default function Products() {
   async function del(id) {
     if (!confirm('Delete this product?')) return;
     const d = await api.del(`/admin/products/${id}`);
-    if (d.ok) { load(page, sort); show('Deleted'); }
-    else show(d.error || 'Failed', 'error');
+    if (d.ok) {
+      load(page, sort);
+      show(d.softDeleted ? 'Deleted — this product has past quotations, so its history was kept.' : 'Deleted');
+    } else show(d.error || 'Failed', 'error');
   }
 
   const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -147,16 +155,23 @@ export default function Products() {
   const setQeF = k => e => setQeForm(f => ({ ...f, [k]: e.target.value }));
 
   // ── Selection & bulk ──────────────────────────────────────────────────────
+  // toggleAll only ever affects rows on the current page. Selecting every row
+  // on a page (when more pages exist) surfaces a prompt to extend the
+  // selection to every product matching the current search, across all pages.
 
   function toggleAll() {
-    if (selected.size === products.length && products.length > 0) {
-      setSelected(new Set());
+    const pageIds = products.map(p => p.id);
+    const allOnPageSelected = pageIds.length > 0 && pageIds.every(id => selected.has(id));
+    setSelectAllMatching(false);
+    if (allOnPageSelected) {
+      setSelected(prev => { const next = new Set(prev); pageIds.forEach(id => next.delete(id)); return next; });
     } else {
-      setSelected(new Set(products.map(p => p.id)));
+      setSelected(prev => new Set([...prev, ...pageIds]));
     }
   }
 
   function toggleOne(id) {
+    setSelectAllMatching(false);
     setSelected(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -164,12 +179,29 @@ export default function Products() {
     });
   }
 
+  async function selectAllAcrossPages() {
+    setSelectingAll(true);
+    const d = await api.get(`/admin/products/ids?q=${encodeURIComponent(search)}`);
+    setSelectingAll(false);
+    if (d.ok) {
+      setSelected(new Set(d.ids));
+      setSelectAllMatching(true);
+    } else {
+      show('Failed to select all matching products.', 'error');
+    }
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+    setSelectAllMatching(false);
+  }
+
   async function applyBulk() {
     if (!bulkAction) return show('Select an action.', 'error');
     const ids = [...selected];
     if (!ids.length) return;
     if (bulkAction === 'delete') {
-      if (!confirm(`Permanently delete ${ids.length} product(s)?`)) return;
+      if (!confirm(`This will delete ${ids.length} product(s). This cannot be undone for products with no quotation history. Continue?`)) return;
     }
     if (bulkAction === 'change_category' && !bulkCatId) {
       return show('Select a target category.', 'error');
@@ -182,15 +214,22 @@ export default function Products() {
     if (d.ok) {
       setBulkAction('');
       setBulkCatId('');
-      load(page, sort);
-      show(`Done: ${d.affected} product(s) updated.`);
+      load(1, sort);
+      if (bulkAction === 'delete' && d.softDeleted > 0) {
+        show(`Deleted ${d.hardDeleted} product(s); ${d.softDeleted} hidden (used in past quotations).`);
+      } else {
+        show(`Done: ${d.affected} product(s) updated.`);
+      }
     } else {
       show(d.error || 'Failed', 'error');
     }
   }
 
-  const allChecked = products.length > 0 && selected.size === products.length;
+  const pageIds = products.map(p => p.id);
+  const allOnPageChecked = pageIds.length > 0 && pageIds.every(id => selected.has(id));
   const anySelected = selected.size > 0;
+  const morePagesExist = total > products.length;
+  const showSelectAllPrompt = allOnPageChecked && !selectAllMatching && morePagesExist;
 
   return (
     <AdminLayout>
@@ -206,26 +245,43 @@ export default function Products() {
 
       {/* Bulk toolbar */}
       {anySelected && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, padding: '8px 12px', background: 'rgba(139,0,0,0.05)', borderRadius: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--garnet)' }}>{selected.size} selected</span>
-          <select className="form-control form-control-sm" value={bulkAction} onChange={e => { setBulkAction(e.target.value); setBulkCatId(''); }}
-                  style={{ width: 'auto', minWidth: 180 }}>
-            <option value="">— Choose action —</option>
-            <option value="delete">Delete</option>
-            <option value="change_category">Change Category</option>
-            <option value="delete_image">Delete Image</option>
-          </select>
-          {bulkAction === 'change_category' && (
-            <select className="form-control form-control-sm" value={bulkCatId} onChange={e => setBulkCatId(e.target.value)}
-                    style={{ width: 'auto', minWidth: 160 }}>
-              <option value="">— Select category —</option>
-              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px', background: 'rgba(139,0,0,0.05)', borderRadius: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--garnet)' }}>
+              {selectAllMatching ? `All ${selected.size} product(s) selected` : `${selected.size} selected`}
+            </span>
+            <select className="form-control form-control-sm" value={bulkAction} onChange={e => { setBulkAction(e.target.value); setBulkCatId(''); }}
+                    style={{ width: 'auto', minWidth: 180 }}>
+              <option value="">— Choose action —</option>
+              <option value="delete">Delete</option>
+              <option value="change_category">Change Category</option>
+              <option value="delete_image">Delete Image</option>
             </select>
+            {bulkAction === 'change_category' && (
+              <select className="form-control form-control-sm" value={bulkCatId} onChange={e => setBulkCatId(e.target.value)}
+                      style={{ width: 'auto', minWidth: 160 }}>
+                <option value="">— Select category —</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={applyBulk} disabled={bulkSaving || !bulkAction}>
+              {bulkSaving ? <><span className="spinner" />…</> : 'Apply'}
+            </button>
+            <button className="btn btn-outline btn-sm" onClick={clearSelection}>Clear</button>
+          </div>
+          {showSelectAllPrompt && (
+            <div style={{ fontSize: 13, padding: '6px 12px', color: 'var(--mid)' }}>
+              All {products.length} products on this page are selected.{' '}
+              <button
+                className="btn-link"
+                style={{ background: 'none', border: 'none', padding: 0, color: 'var(--garnet)', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                onClick={selectAllAcrossPages}
+                disabled={selectingAll}
+              >
+                {selectingAll ? 'Selecting…' : `Select all ${total} products matching this search`}
+              </button>
+            </div>
           )}
-          <button className="btn btn-primary btn-sm" onClick={applyBulk} disabled={bulkSaving || !bulkAction}>
-            {bulkSaving ? <><span className="spinner" />…</> : 'Apply'}
-          </button>
-          <button className="btn btn-outline btn-sm" onClick={() => setSelected(new Set())}>Clear</button>
         </div>
       )}
 
@@ -234,7 +290,7 @@ export default function Products() {
           <thead>
             <tr>
               <th style={{ width: 32, padding: '8px 6px' }}>
-                <input type="checkbox" checked={allChecked} onChange={toggleAll} title="Select all" />
+                <input type="checkbox" checked={allOnPageChecked} onChange={toggleAll} title="Select all on this page" />
               </th>
               <th>Image</th>
               <Th col="design_number" sort={sort} onSort={handleSort}>Design No.</Th>
@@ -257,7 +313,7 @@ export default function Products() {
                   </td>
                   <td>
                     {p.image_url
-                      ? <img src={p.image_url} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} alt="" />
+                      ? <img src={p.image_url} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'zoom-in' }} alt="" onClick={() => openImage(p.image_url)} />
                       : '—'}
                   </td>
                   <td>{p.design_number}</td>
@@ -361,6 +417,13 @@ export default function Products() {
               </div>
               <div className="form-group">
                 <label>Image {editId && <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(leave blank to keep current)</span>}</label>
+                {editImageUrl && (
+                  <img
+                    src={editImageUrl} alt="Current"
+                    style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, display: 'block', marginBottom: 8, cursor: 'zoom-in' }}
+                    onClick={() => openImage(editImageUrl)}
+                  />
+                )}
                 <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} />
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

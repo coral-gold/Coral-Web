@@ -78,6 +78,7 @@ router.post('/run', async (req, res) => {
 
         // Reinitialise the live pool
         db.reinit({ host, user, password: password || '', database });
+        await require('../migrations').runMigrations();
 
         res.json({ ok: true });
     } catch (e) {

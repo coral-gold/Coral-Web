@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useCart } from '../context/CartContext';
 import { useToast } from './Toast';
+import { useLightbox } from './ImageLightbox';
 import api from '../api';
 
 export default function QuotationPanel() {
   const { cart, set, remove, clear, panelOpen, setPanelOpen } = useCart();
   const { show } = useToast();
+  const openImage = useLightbox();
   const [notes, setNotes]     = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -59,7 +61,7 @@ export default function QuotationPanel() {
             cart.lines.map(line => (
               <div key={line.cartId} className="panel-item">
                 {line.image
-                  ? <img src={line.image} className="panel-item-img" alt="" />
+                  ? <img src={line.image} className="panel-item-img" alt="" onClick={() => openImage(line.image)} style={{ cursor: 'zoom-in' }} />
                   : <div className="panel-item-placeholder">💍</div>
                 }
                 <div className="panel-item-info">

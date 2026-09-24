@@ -17,11 +17,13 @@ CREATE TABLE IF NOT EXISTS products (
     image_path VARCHAR(255),
     description TEXT,
     is_featured TINYINT DEFAULT 0,
+    active TINYINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (category_id) REFERENCES categories(id),
     INDEX idx_category (category_id),
     INDEX idx_jewel_code (jewel_code),
-    INDEX idx_featured (is_featured)
+    INDEX idx_featured (is_featured),
+    INDEX idx_active (active)
 );
 
 CREATE TABLE IF NOT EXISTS parties (

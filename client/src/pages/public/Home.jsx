@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/PublicLayout';
+import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
   const [content,  setContent]  = useState({});
+  const openImage = useLightbox();
 
   useEffect(() => {
     api.get('/catalogue?mode=public&page=1').then(d => {
@@ -69,7 +71,7 @@ export default function Home() {
               {featured.map(p => (
                 <div key={p.id} className="pub-card">
                   {p.image
-                    ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" />
+                    ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" onClick={() => openImage(p.image)} style={{ cursor: 'zoom-in' }} />
                     : <div className="pub-card-img-placeholder">💍</div>
                   }
                   <div className="pub-card-body">

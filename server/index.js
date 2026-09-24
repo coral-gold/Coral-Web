@@ -71,8 +71,9 @@ app.listen(PORT, () => {
         console.warn('[DB] Not configured — visit /setup to initialise the database.');
         return;
     }
-    db.query('SELECT 1').then(() => {
+    db.query('SELECT 1').then(async () => {
         console.log('[DB] Connection OK');
+        await require('./migrations').runMigrations();
     }).catch(e => {
         console.error('[DB] Connection FAILED:', e.message);
         if (e.code === 'ER_ACCESS_DENIED_ERROR' || e.code === 'ER_DBACCESS_DENIED_ERROR') {

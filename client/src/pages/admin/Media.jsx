@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
+import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
 function fmtSize(bytes) {
@@ -35,6 +36,7 @@ function LibraryTab() {
   const [uploading, setUploading]= useState(false);
   const [copied,    setCopied]   = useState(null);
   const { show } = useToast();
+  const openImage = useLightbox();
   const uploadRef = useRef(null);
 
   // Real server-side pagination: fetch and render one page at a time.
@@ -140,7 +142,8 @@ function LibraryTab() {
             {files.map(f => (
               <tr key={f.key}>
                 <td>
-                  <img src={f.url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, display: 'block' }}
+                  <img src={f.url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, display: 'block', cursor: 'zoom-in' }}
+                       onClick={() => openImage(f.url)}
                        onError={e => { e.target.style.display = 'none'; }} />
                 </td>
                 <td style={{ maxWidth: 200, wordBreak: 'break-all', fontSize: 12 }}>{f.filename}</td>

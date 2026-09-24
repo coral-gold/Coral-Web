@@ -77,7 +77,7 @@ export default function Import() {
     while (true) {
       await new Promise(r => setTimeout(r, 600));
       let status;
-      try { status = await api.get(`/admin/jobs/${d.jobId}`); } catch (_) { continue; }
+      try { status = await api.get(`/admin/jobs/${d.jobId}`, { silent: true }); } catch (_) { continue; }
       if (!status || !status.ok) continue;
       if (status.progress) setRunProgress(status.progress);
       if (status.status === 'done') { jobResult = status.result; break; }

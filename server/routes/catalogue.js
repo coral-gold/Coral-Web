@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
     const search   = (req.query.search   || '').trim();
     const mode     = req.query.mode === 'public' ? 'public' : 'wholesaler';
 
-    const conds  = [];
+    const conds  = ['p.active = 1'];
     const params = [];
 
     if (category) {
@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
         params.push(like, like);
     }
 
-    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+    const where = 'WHERE ' + conds.join(' AND ');
 
     try {
         const [[{ total }]] = await db.query(
@@ -63,7 +63,7 @@ router.get('/', async (req, res) => {
 router.get('/categories', async (req, res) => {
     try {
         const [rows] = await db.query(
-            'SELECT DISTINCT c.name FROM categories c JOIN products p ON p.category_id = c.id ORDER BY c.name'
+            'SELECT DISTINCT c.name FROM categories c JOIN products p ON p.category_id = c.id WHERE p.active = 1 ORDER BY c.name'
         );
         res.json({ ok: true, categories: rows.map(r => r.name) });
     } catch (e) {
