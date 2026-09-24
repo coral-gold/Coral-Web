@@ -2,11 +2,14 @@
 const router  = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const path    = require('path');
+const fs      = require('fs');
 const XLSX    = require('xlsx');
 const db      = require('../db');
 const { requireAdmin }  = require('../middleware/auth');
 const { imageUpload, xlsxUpload, saveImage } = require('../middleware/upload');
 const { generateQuotationPDF }    = require('../pdf');
+
+const UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
 
 router.use(requireAdmin);
 
@@ -84,11 +87,22 @@ router.post('/categories/merge', async (req, res) => {
 
 // ── Products ───────────────────────────────────────────────────────────────────
 
+const PRODUCT_SORT_COLS = {
+    design_number: 'p.design_number',
+    jewel_code:    'p.jewel_code',
+    category:      'c.name',
+    gross_weight:  'p.gross_weight',
+    net_weight:    'p.net_weight',
+    created_at:    'p.created_at',
+};
+
 router.get('/products', async (req, res) => {
-    const page   = Math.max(1, parseInt(req.query.page) || 1);
-    const per    = 25;
-    const offset = (page - 1) * per;
-    const search = (req.query.q || '').trim();
+    const page    = Math.max(1, parseInt(req.query.page) || 1);
+    const per     = 25;
+    const offset  = (page - 1) * per;
+    const search  = (req.query.q || '').trim();
+    const sortCol = PRODUCT_SORT_COLS[req.query.sort] || 'p.created_at';
+    const sortDir = req.query.order === 'asc' ? 'ASC' : 'DESC';
 
     const conds = [], params = [];
     if (search) {
@@ -102,7 +116,7 @@ router.get('/products', async (req, res) => {
             `SELECT COUNT(*) AS total FROM products p JOIN categories c ON c.id = p.category_id ${where}`, params
         );
         const [rows] = await db.query(
-            `SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON c.id = p.category_id ${where} ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
+            `SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON c.id = p.category_id ${where} ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
         res.json({ ok: true, products: rows, total, pages: Math.ceil(total / per), hasMore: offset + rows.length < total });
@@ -227,6 +241,32 @@ router.post('/import/preview', xlsxUpload.single('file'), async (req, res) => {
     }
 });
 
+// ── Media Library ──────────────────────────────────────────────────────────────
+
+router.get('/media', (req, res) => {
+    try {
+        const IMAGE_RE = /\.(jpe?g|png|gif|webp|svg)$/i;
+        const files = fs.readdirSync(UPLOAD_DIR)
+            .filter(f => IMAGE_RE.test(f) && f !== '.gitkeep')
+            .map(f => {
+                const stat = fs.statSync(path.join(UPLOAD_DIR, f));
+                return { filename: f, url: '/uploads/' + f, size: stat.size, mtime: stat.mtimeMs };
+            })
+            .sort((a, b) => b.mtime - a.mtime);
+        res.json({ ok: true, files });
+    } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
+router.delete('/media/:filename', (req, res) => {
+    const fn = path.basename(req.params.filename); // prevent path traversal
+    if (!fn || fn === '.gitkeep') return res.json({ ok: false, error: 'Invalid filename.' });
+    const filepath = path.join(UPLOAD_DIR, fn);
+    try {
+        if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+        res.json({ ok: true });
+    } catch (e) { res.json({ ok: false, error: e.message }); }
+});
+
 // Step 2: Run import using admin-supplied column mapping
 // Body: { fileId, mapping: { "Column Name": "field_name" | null, ... } }
 router.post('/import/run', async (req, res) => {
@@ -272,12 +312,15 @@ router.post('/import/run', async (req, res) => {
         const qty       = col.quantity      !== undefined ? parseInt(row[col.quantity])        || 0     : 0;
         const descr     = col.description   !== undefined ? String(row[col.description]   ?? '').trim() || null : null;
 
-        // Collect image path info for client-side upload
+        // Always include in imageMap so client can match against selected folder
+        // If an image_path column was mapped, also include the extracted filename as a hint
+        const imgEntry = { jewel_code: jewelCode, design_number: designNo || jewelCode };
         if (col.image_path !== undefined) {
             const rawPath = String(row[col.image_path] ?? '').trim();
             const filename = extractImageFilename(rawPath);
-            if (filename) imageMap.push({ jewel_code: jewelCode, filename });
+            if (filename) imgEntry.filename = filename;
         }
+        imageMap.push(imgEntry);
 
         try {
             let catId = catName ? catCache[catName] : null;
@@ -351,13 +394,22 @@ router.post('/import/images', imageUpload.single('image'), async (req, res) => {
 
 // ── Parties ────────────────────────────────────────────────────────────────────
 
+const PARTY_SORT_COLS = {
+    party_id:     'party_id',
+    company_name: 'company_name',
+    phone:        'phone',
+    created_at:   'created_at',
+};
+
 router.get('/parties', async (req, res) => {
-    const page   = Math.max(1, parseInt(req.query.page) || 1);
-    const per    = 25;
-    const offset = (page - 1) * per;
+    const page    = Math.max(1, parseInt(req.query.page) || 1);
+    const per     = 25;
+    const offset  = (page - 1) * per;
+    const sortCol = PARTY_SORT_COLS[req.query.sort] || 'created_at';
+    const sortDir = req.query.order === 'asc' ? 'ASC' : 'DESC';
     const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM parties');
     const [rows] = await db.query(
-        'SELECT id, party_id, company_name, phone, is_active, created_at FROM parties ORDER BY created_at DESC LIMIT ? OFFSET ?',
+        `SELECT id, party_id, company_name, phone, is_active, created_at FROM parties ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
         [per, offset]
     );
     res.json({ ok: true, parties: rows, total, pages: Math.ceil(total / per) });
@@ -431,18 +483,29 @@ router.get('/quotations', async (req, res) => {
     if (dateTo)    { conds.push('DATE(q.created_at) <= ?'); params.push(dateTo); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
+    const sortCol = req.query.sort === 'company_name' ? 'p.company_name'
+                  : req.query.sort === 'quotation_number' ? 'q.quotation_number'
+                  : 'q.created_at';
+    const sortDir = req.query.order === 'asc' ? 'ASC' : 'DESC';
     try {
         const [[{ total }]] = await db.query(
-            `SELECT COUNT(*) AS total FROM quotations q JOIN parties p ON p.id=q.party_id ${where}`, params
+            `SELECT COUNT(DISTINCT q.id) AS total FROM quotations q JOIN parties p ON p.id=q.party_id ${where}`, params
         );
         const [rows] = await db.query(
-            `SELECT q.id, q.quotation_number, q.created_at, p.company_name, p.party_id AS pid
-             FROM quotations q JOIN parties p ON p.id=q.party_id ${where}
-             ORDER BY q.created_at DESC LIMIT ? OFFSET ?`,
+            `SELECT q.id, q.quotation_number, q.created_at, p.company_name, p.party_id AS pid,
+                    COUNT(qi.id) AS item_count,
+                    COALESCE(SUM(qi.quantity), 0) AS piece_count,
+                    COALESCE(SUM(qi.quantity * qi.gross_weight), 0) AS total_gross_weight
+             FROM quotations q
+             JOIN parties p ON p.id=q.party_id
+             LEFT JOIN quotation_items qi ON qi.quotation_id=q.id
+             ${where}
+             GROUP BY q.id, p.company_name, p.party_id
+             ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
         res.json({ ok: true, quotations: rows, total, pages: Math.ceil(total / per) });
-    } catch (e) { res.status(500).json({ ok: false }); }
+    } catch (e) { console.error(e); res.status(500).json({ ok: false }); }
 });
 
 router.get('/quotations/:id', async (req, res) => {
@@ -456,6 +519,7 @@ router.get('/quotations/:id', async (req, res) => {
 });
 
 router.get('/quotations/:id/pdf', async (req, res) => {
+    const withImages = req.query.mode === 'images';
     try {
         const [[q]] = await db.query(
             'SELECT q.*, p.company_name, p.party_id, p.phone FROM quotations q JOIN parties p ON p.id=q.party_id WHERE q.id=?',
@@ -463,8 +527,20 @@ router.get('/quotations/:id/pdf', async (req, res) => {
         );
         if (!q) return res.status(404).send('Not found');
         const [items] = await db.query('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id', [q.id]);
-        const buf     = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items);
-        res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${q.quotation_number}.pdf"`, 'Content-Length': buf.length });
+
+        let itemImages = {};
+        if (withImages) {
+            const productIds = items.map(i => i.product_id).filter(Boolean);
+            if (productIds.length) {
+                const ph = productIds.map(() => '?').join(',');
+                const [imgRows] = await db.query(`SELECT id, image_path FROM products WHERE id IN (${ph})`, productIds);
+                for (const r of imgRows) if (r.image_path) itemImages[r.id] = r.image_path;
+            }
+        }
+
+        const buf    = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items, { withImages, itemImages });
+        const suffix = withImages ? '-with-images' : '';
+        res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${q.quotation_number}${suffix}.pdf"`, 'Content-Length': buf.length });
         res.end(buf);
     } catch (e) { console.error(e); res.status(500).send('Error'); }
 });

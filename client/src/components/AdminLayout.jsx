@@ -10,6 +10,7 @@ const NAV = [
   { to: '/admin/parties',     label: 'Parties' },
   { to: '/admin/quotations',  label: 'Quotations' },
   { to: '/admin/content',     label: 'Content' },
+  { to: '/admin/media',       label: 'Media' },
 ];
 
 export default function AdminLayout({ children }) {

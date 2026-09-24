@@ -3,8 +3,21 @@ import AdminLayout from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
 
+function Th({ col, sort, onSort, children }) {
+  const active = sort.col === col;
+  return (
+    <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => onSort(col)}>
+      {children}
+      <span style={{ marginLeft: 4, color: active ? 'var(--garnet)' : '#bbb', fontSize: 10 }}>
+        {active ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}
+      </span>
+    </th>
+  );
+}
+
 export default function Categories() {
   const [categories, setCategories] = useState([]);
+  const [sort,       setSort]       = useState({ col: 'name', dir: 'asc' });
   const [name,       setName]       = useState('');
   const [editId,     setEditId]     = useState(null);
   const [editName,   setEditName]   = useState('');
@@ -12,6 +25,18 @@ export default function Categories() {
   const [mergeTarget,setMergeTarget]= useState('');
   const [mergeSrcs,  setMergeSrcs]  = useState(new Set());
   const { show } = useToast();
+
+  function handleSort(col) {
+    setSort(s => ({ col, dir: s.col === col && s.dir === 'asc' ? 'desc' : 'asc' }));
+  }
+
+  const sorted = [...categories].sort((a, b) => {
+    let va = a[sort.col], vb = b[sort.col];
+    if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+    else { va = va ?? 0; vb = vb ?? 0; }
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return sort.dir === 'asc' ? cmp : -cmp;
+  });
 
   async function load() {
     const d = await api.get('/admin/categories');
@@ -88,9 +113,15 @@ export default function Categories() {
 
       <div className="table-wrap">
         <table className="admin-table">
-          <thead><tr><th>Name</th><th>Products</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <Th col="name"          sort={sort} onSort={handleSort}>Name</Th>
+              <Th col="product_count" sort={sort} onSort={handleSort}>Products</Th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody>
-            {categories.map(c => (
+            {sorted.map(c => (
               <tr key={c.id}>
                 <td>
                   {editId === c.id

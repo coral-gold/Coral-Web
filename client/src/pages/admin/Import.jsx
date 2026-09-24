@@ -76,7 +76,7 @@ export default function Import() {
   // ── Step 4: image upload ──────────────────────────────────────────────────
 
   async function uploadImages(imageMap, folderFiles) {
-    // Build filename → File lookup (case-insensitive)
+    // Build filename → File lookup (case-insensitive, all subfolders flattened by bare name)
     const fileIndex = {};
     for (const f of folderFiles) {
       fileIndex[f.name.toLowerCase()] = f;
@@ -85,14 +85,14 @@ export default function Import() {
     let done = 0, matched = 0, skipped = 0;
     setImgProgress({ done: 0, total: imageMap.length, matched: 0, skipped: 0 });
 
-    for (const { jewel_code, filename } of imageMap) {
-      const fn = filename.toLowerCase();
-      // Try exact filename, then jewel_code + common extensions
-      const file = fileIndex[fn]
-        || fileIndex[jewel_code.toLowerCase() + '.jpg']
-        || fileIndex[jewel_code.toLowerCase() + '.jpeg']
-        || fileIndex[jewel_code.toLowerCase() + '.png']
-        || fileIndex[jewel_code.toLowerCase() + '.webp'];
+    for (const { jewel_code, design_number } of imageMap) {
+      // Match by design_number (= Style Number = image filename without extension)
+      const dn = (design_number || jewel_code).toLowerCase();
+      const file = fileIndex[dn + '.jpg']
+        || fileIndex[dn + '.jpeg']
+        || fileIndex[dn + '.png']
+        || fileIndex[dn + '.webp']
+        || fileIndex[dn + '.gif'];
 
       if (file) {
         const fd = new FormData();
@@ -177,7 +177,8 @@ export default function Import() {
                 }
               </div>
               <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 6 }}>
-                Select your ERP's image folder (e.g. SavedImage). Images will be matched by filename to each product's Jewel Code.
+                Select the parent folder containing category subfolders (e.g. select "SavedImage" which contains "WTDC/", "BG/", etc.).
+                Images are matched by filename = Design Number (Style Number).
               </p>
             </div>
 
@@ -235,8 +236,7 @@ export default function Import() {
 
             {imgFolder && (
               <p style={{ fontSize: 13, color: '#27ae60', marginBottom: 12 }}>
-                ✓ {imgFolder.length} images in folder ready for upload.
-                Map the image path column to <strong>"Image Path (for matching)"</strong> if available.
+                ✓ {imgFolder.length} files in folder ready for upload. Images will be matched by Design Number (Style Number).
               </p>
             )}
 

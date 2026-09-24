@@ -21,6 +21,7 @@ import Import        from './pages/admin/Import';
 import Parties       from './pages/admin/Parties';
 import AdminQuotations from './pages/admin/Quotations';
 import Content       from './pages/admin/Content';
+import Media         from './pages/admin/Media';
 import Setup         from './pages/Setup';
 
 function PartyRoute({ children }) {
@@ -79,6 +80,7 @@ export default function App() {
               <Route path="/admin/parties"        element={<AdminRoute><Parties /></AdminRoute>} />
               <Route path="/admin/quotations"     element={<AdminRoute><AdminQuotations /></AdminRoute>} />
               <Route path="/admin/content"        element={<AdminRoute><Content /></AdminRoute>} />
+              <Route path="/admin/media"          element={<AdminRoute><Media /></AdminRoute>} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

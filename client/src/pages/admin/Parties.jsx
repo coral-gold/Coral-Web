@@ -5,17 +5,37 @@ import api from '../../api';
 
 const EMPTY = { party_id: '', company_name: '', password: '', phone: '' };
 
+function Th({ col, sort, onSort, children }) {
+  const active = sort.col === col;
+  return (
+    <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => onSort(col)}>
+      {children}
+      <span style={{ marginLeft: 4, color: active ? 'var(--garnet)' : '#bbb', fontSize: 10 }}>
+        {active ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}
+      </span>
+    </th>
+  );
+}
+
 export default function Parties() {
   const [parties, setParties] = useState([]);
+  const [sort,    setSort]    = useState({ col: 'company_name', dir: 'asc' });
   const [modal,   setModal]   = useState(false);
   const [form,    setForm]    = useState(EMPTY);
   const [editId,  setEditId]  = useState(null);
   const [saving,  setSaving]  = useState(false);
   const { show } = useToast();
 
-  async function load() {
-    const d = await api.get('/admin/parties');
+  async function load(sortOpts) {
+    const s = sortOpts || sort;
+    const d = await api.get(`/admin/parties?sort=${s.col}&order=${s.dir}`);
     if (d.ok) setParties(d.parties);
+  }
+
+  function handleSort(col) {
+    const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
+    setSort(newSort);
+    load(newSort);
   }
 
   useEffect(() => { load(); }, []);
@@ -64,7 +84,13 @@ export default function Parties() {
       <div className="table-wrap">
         <table className="admin-table">
           <thead>
-            <tr><th>Party ID</th><th>Company Name</th><th>Phone</th><th>Status</th><th></th></tr>
+            <tr>
+              <Th col="party_id"     sort={sort} onSort={handleSort}>Party ID</Th>
+              <Th col="company_name" sort={sort} onSort={handleSort}>Company Name</Th>
+              <th>Phone</th>
+              <Th col="is_active"    sort={sort} onSort={handleSort}>Status</Th>
+              <th></th>
+            </tr>
           </thead>
           <tbody>
             {parties.length === 0 && (

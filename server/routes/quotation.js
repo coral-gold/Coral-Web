@@ -1,8 +1,11 @@
 'use strict';
 const router = require('express').Router();
+const path   = require('path');
 const db     = require('../db');
 const { requireParty } = require('../middleware/auth');
 const { generateQuotationPDF } = require('../pdf');
+
+const UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
 
 router.use(requireParty);
 
@@ -70,7 +73,9 @@ router.get('/', async (req, res) => {
     try {
         const [rows] = await db.query(
             `SELECT q.id, q.quotation_number, q.notes, q.created_at,
-                    COUNT(qi.id) AS item_count, SUM(qi.quantity) AS piece_count
+                    COUNT(qi.id) AS item_count,
+                    COALESCE(SUM(qi.quantity), 0) AS piece_count,
+                    COALESCE(SUM(qi.quantity * qi.gross_weight), 0) AS total_gross_weight
              FROM quotations q LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
              WHERE q.party_id = ?
              GROUP BY q.id ORDER BY q.created_at DESC`,
@@ -82,8 +87,9 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/quotation/:id/pdf
+// GET /api/quotation/:id/pdf?mode=text|images
 router.get('/:id/pdf', async (req, res) => {
+    const withImages = req.query.mode === 'images';
     try {
         const [[q]] = await db.query(
             'SELECT * FROM quotations WHERE id = ? AND party_id = ?',
@@ -96,10 +102,27 @@ router.get('/:id/pdf', async (req, res) => {
             'SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id', [q.id]
         );
 
-        const pdfBuffer = await generateQuotationPDF(q, party, items);
+        // If with-images mode, fetch current image_path for each product
+        let itemImages = {};
+        if (withImages) {
+            const productIds = items.map(i => i.product_id).filter(Boolean);
+            if (productIds.length) {
+                const placeholders = productIds.map(() => '?').join(',');
+                const [imgRows] = await db.query(
+                    `SELECT id, image_path FROM products WHERE id IN (${placeholders})`,
+                    productIds
+                );
+                for (const r of imgRows) {
+                    if (r.image_path) itemImages[r.id] = r.image_path;
+                }
+            }
+        }
+
+        const pdfBuffer = await generateQuotationPDF(q, party, items, { withImages, itemImages });
+        const suffix = withImages ? '-with-images' : '';
         res.set({
             'Content-Type':        'application/pdf',
-            'Content-Disposition': `inline; filename="${q.quotation_number}.pdf"`,
+            'Content-Disposition': `inline; filename="${q.quotation_number}${suffix}.pdf"`,
             'Content-Length':      pdfBuffer.length,
         });
         res.end(pdfBuffer);

@@ -13,9 +13,8 @@ export default function MyQuotations() {
     });
   }, []);
 
-  function downloadPdf(id) {
-    const win = window.open('', '_blank');
-    win.location.href = `/api/quotation/${id}/pdf`;
+  function openPdf(id, mode) {
+    window.open(`/api/quotation/${id}/pdf?mode=${mode}`, '_blank');
   }
 
   return (
@@ -38,22 +37,25 @@ export default function MyQuotations() {
                 <th>Quotation No.</th>
                 <th>Date</th>
                 <th>Items</th>
-                <th>Pieces</th>
+                <th>Pcs</th>
                 <th>Gross Wt.</th>
-                <th></th>
+                <th>Download</th>
               </tr>
             </thead>
             <tbody>
               {quotations.map(q => (
                 <tr key={q.id}>
-                  <td><strong>{q.number}</strong></td>
+                  <td><strong>{q.quotation_number}</strong></td>
                   <td>{new Date(q.created_at).toLocaleDateString('en-IN')}</td>
                   <td>{q.item_count}</td>
                   <td>{q.piece_count}</td>
-                  <td>{parseFloat(q.total_gross_weight).toFixed(3)}g</td>
-                  <td>
-                    <button className="btn btn-sm btn-outline" onClick={() => downloadPdf(q.id)}>
-                      Download PDF
+                  <td>{parseFloat(q.total_gross_weight || 0).toFixed(3)}g</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, 'text')} style={{ marginRight: 6 }}>
+                      PDF
+                    </button>
+                    <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, 'images')}>
+                      PDF + Images
                     </button>
                   </td>
                 </tr>

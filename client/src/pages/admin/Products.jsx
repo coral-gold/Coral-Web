@@ -5,12 +5,25 @@ import api from '../../api';
 
 const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', description: '' };
 
+function Th({ col, sort, onSort, children }) {
+  const active = sort.col === col;
+  return (
+    <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => onSort(col)}>
+      {children}
+      <span style={{ marginLeft: 4, color: active ? 'var(--garnet)' : '#bbb', fontSize: 10 }}>
+        {active ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}
+      </span>
+    </th>
+  );
+}
+
 export default function Products() {
   const [products,   setProducts]   = useState([]);
   const [categories, setCategories] = useState([]);
   const [page,       setPage]       = useState(1);
   const [hasMore,    setHasMore]    = useState(false);
   const [search,     setSearch]     = useState('');
+  const [sort,       setSort]       = useState({ col: 'design_number', dir: 'asc' });
   const [modal,      setModal]      = useState(false);
   const [form,       setForm]       = useState(EMPTY);
   const [editId,     setEditId]     = useState(null);
@@ -19,14 +32,22 @@ export default function Products() {
   const { show } = useToast();
   const debounce = useRef(null);
 
-  async function load(reset = false) {
+  async function load(reset = false, sortOpts) {
     const p = reset ? 1 : page;
-    const d = await api.get(`/admin/products?page=${p}&q=${encodeURIComponent(search)}`);
+    const s = sortOpts || sort;
+    const d = await api.get(`/admin/products?page=${p}&q=${encodeURIComponent(search)}&sort=${s.col}&order=${s.dir}`);
     if (d.ok) {
       setProducts(prev => reset ? d.products : [...prev, ...d.products]);
       setHasMore(d.hasMore || false);
       setPage(p + 1);
     }
+  }
+
+  function handleSort(col) {
+    const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
+    setSort(newSort);
+    setPage(1);
+    load(true, newSort);
   }
 
   useEffect(() => {
@@ -94,7 +115,15 @@ export default function Products() {
       <div className="table-wrap">
         <table className="admin-table">
           <thead>
-            <tr><th>Image</th><th>Design No.</th><th>Jewel Code</th><th>Category</th><th>Gross Wt.</th><th>Net Wt.</th><th></th></tr>
+            <tr>
+              <th>Image</th>
+              <Th col="design_number" sort={sort} onSort={handleSort}>Design No.</Th>
+              <Th col="jewel_code"    sort={sort} onSort={handleSort}>Jewel Code</Th>
+              <Th col="category_name" sort={sort} onSort={handleSort}>Category</Th>
+              <Th col="gross_weight"  sort={sort} onSort={handleSort}>Gross Wt.</Th>
+              <Th col="net_weight"    sort={sort} onSort={handleSort}>Net Wt.</Th>
+              <th></th>
+            </tr>
           </thead>
           <tbody>
             {products.length === 0 && (
