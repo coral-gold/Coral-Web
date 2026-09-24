@@ -27,6 +27,21 @@ CREATE TABLE IF NOT EXISTS products (
     INDEX idx_active (active)
 );
 
+-- Extra gallery photos beyond products.image_path, which stays the single
+-- "primary" image used everywhere else (cards, PDFs, quotations, Excel
+-- import) unchanged. This table only feeds the swipeable image preview
+-- (Batch 21 item 1) — a product with none still shows fine as a
+-- single-image gallery.
+CREATE TABLE IF NOT EXISTS product_images (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    product_id INT NOT NULL,
+    image_path VARCHAR(255) NOT NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    INDEX idx_product (product_id)
+);
+
 -- Many-to-many product↔category. products.category_id remains the "primary"
 -- category (used for Excel import, sort/display fallback); every category a
 -- product belongs to — including the primary — also has a row here, so all

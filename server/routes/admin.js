@@ -377,6 +377,60 @@ router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
     }
 });
 
+// ── Product gallery (extra images beyond the primary) ───────────────────────
+// Batch 21 item 1: additional angles/close-ups shown as a swipeable gallery
+// in the customer-facing image preview, on top of the one primary image
+// every other flow (cards, PDF, Excel import) still uses unchanged.
+
+router.get('/products/:id/images', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT id, image_path FROM product_images WHERE product_id = ? ORDER BY sort_order, id',
+            [req.params.id]
+        );
+        res.json({ ok: true, images: rows.map(r => ({ id: r.id, url: storage.getPublicUrl(r.image_path) })) });
+    } catch (e) {
+        console.error('[product images list]', e);
+        res.status(500).json({ ok: false });
+    }
+});
+
+router.post('/products/:id/images', imageUpload.single('image'), async (req, res) => {
+    if (!req.file) return res.json({ ok: false, error: 'image required.' });
+    try {
+        const [[p]] = await db.query('SELECT id FROM products WHERE id = ?', [req.params.id]);
+        if (!p) return res.json({ ok: false, error: 'Product not found.' });
+        const imgPath = await saveImage(req.file);
+        const [[{ next }]] = await db.query(
+            'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM product_images WHERE product_id = ?', [req.params.id]
+        );
+        const [r] = await db.query(
+            'INSERT INTO product_images (product_id, image_path, sort_order) VALUES (?,?,?)',
+            [req.params.id, imgPath, next]
+        );
+        res.json({ ok: true, image: { id: r.insertId, url: storage.getPublicUrl(imgPath) } });
+    } catch (e) {
+        console.error('[product images add]', e);
+        res.json({ ok: false, error: e.message });
+    }
+});
+
+router.delete('/products/:id/images/:imageId', async (req, res) => {
+    try {
+        const [[row]] = await db.query(
+            'SELECT image_path FROM product_images WHERE id = ? AND product_id = ?',
+            [req.params.imageId, req.params.id]
+        );
+        if (!row) return res.json({ ok: false, error: 'Image not found.' });
+        await db.query('DELETE FROM product_images WHERE id = ?', [req.params.imageId]);
+        await storage.delete(row.image_path).catch(() => {});
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[product images delete]', e);
+        res.json({ ok: false, error: e.message });
+    }
+});
+
 // Products referenced by a past quotation can't be hard-deleted (FK
 // constraint — quotation history must never break). Try a real delete first
 // since most deleted products were never actually quoted; only fall back to
@@ -1005,10 +1059,13 @@ const PDF_LAYOUTS = ['grid2', 'grid3']; // 'list' (no images) removed — Batch 
 // (Batch 20 item 8). 'fit' maps to 'scale-down' (never upscale past the
 // image's natural size, otherwise behaves like 'contain').
 const IMAGE_FIT_MODES = ['cover', 'contain', 'fill', 'scale-down'];
+// How every paginated list (catalogue, admin tables) presents further
+// pages (Batch 21 item 4).
+const PAGINATION_MODES = ['classic', 'load_more', 'infinite'];
 
 router.get('/settings', async (req, res) => {
     try {
-        const keys = [...SETTINGS_BOOL_KEYS, 'pdf_layout', 'product_image_fit', 'site_logo', 'site_favicon'];
+        const keys = [...SETTINGS_BOOL_KEYS, 'pdf_layout', 'product_image_fit', 'pagination_mode', 'site_logo', 'site_favicon'];
         const [rows] = await db.query(
             `SELECT key_name, value FROM content WHERE key_name IN (${keys.map(() => '?').join(',')})`,
             keys
@@ -1024,6 +1081,7 @@ router.get('/settings', async (req, res) => {
                 showAmount:        raw.show_amount       !== '0',
                 pdfLayout:         PDF_LAYOUTS.includes(raw.pdf_layout) ? raw.pdf_layout : 'grid2',
                 productImageFit:   IMAGE_FIT_MODES.includes(raw.product_image_fit) ? raw.product_image_fit : 'cover',
+                paginationMode:    PAGINATION_MODES.includes(raw.pagination_mode) ? raw.pagination_mode : 'classic',
                 siteLogo:          raw.site_logo    || null,
                 siteFavicon:       raw.site_favicon || null,
             },
@@ -1045,6 +1103,9 @@ router.post('/settings', imageUpload.fields([{ name: 'logo', maxCount: 1 }, { na
         }
         if (req.body.product_image_fit !== undefined && IMAGE_FIT_MODES.includes(req.body.product_image_fit)) {
             await setKV('product_image_fit', req.body.product_image_fit);
+        }
+        if (req.body.pagination_mode !== undefined && PAGINATION_MODES.includes(req.body.pagination_mode)) {
+            await setKV('pagination_mode', req.body.pagination_mode);
         }
         if (req.body.site_lock_password) {
             const hash = await bcrypt.hash(String(req.body.site_lock_password), 10);

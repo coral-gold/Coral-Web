@@ -30,6 +30,7 @@ export default function Categories() {
   const [mergeTarget,   setMergeTarget]   = useState('');
   const [mergeSrcs,     setMergeSrcs]     = useState(new Set());
   const [mergeLoading,  setMergeLoading]  = useState(false);
+  const [loadingMore,   setLoadingMore]   = useState(false);
   const { show } = useToast();
 
   function handleSort(col) {
@@ -45,6 +46,21 @@ export default function Categories() {
       if (d.categories.length === 0 && p > 1) return load(p - 1, s);
       setCategories(d.categories);
       setPage(p);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
+  }
+
+  // Load More / infinite scroll (Batch 21 item 4) — appends the next page.
+  async function loadMore() {
+    if (page >= pages || loadingMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const d = await api.get(`/admin/categories?page=${nextPage}&sort=${sort.col}&order=${sort.dir}`);
+    setLoadingMore(false);
+    if (d.ok) {
+      setCategories(prev => [...prev, ...d.categories]);
+      setPage(nextPage);
       setPages(d.pages || 1);
       setTotal(d.total || 0);
     }
@@ -166,7 +182,7 @@ export default function Categories() {
         </table>
       </div>
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, sort)} />
+      <Pagination page={page} pages={pages} total={total} loadingMore={loadingMore} onChange={p => load(p, sort)} onLoadMore={loadMore} />
 
       {/* ── Merge Modal ── */}
       {mergeOpen && (

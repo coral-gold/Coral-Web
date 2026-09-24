@@ -35,6 +35,7 @@ function LibraryTab() {
   const [storagePersistent, setStoragePersistent] = useState(false);
   const [sort,      setSort]     = useState({ col: 'mtime', dir: 'desc' });
   const [uploading, setUploading]= useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [copied,    setCopied]   = useState(null);
   const { show } = useToast();
   const openImage = useLightbox();
@@ -55,6 +56,21 @@ function LibraryTab() {
   }
 
   useEffect(() => { load(1, sort); }, []);
+
+  // Load More / infinite scroll (Batch 21 item 4) — appends the next page.
+  async function loadMore() {
+    if (page >= pages || loadingMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const d = await api.get(`/admin/media?page=${nextPage}&sort=${sort.col}&order=${sort.dir}`);
+    setLoadingMore(false);
+    if (d.ok) {
+      setFiles(prev => [...prev, ...d.files]);
+      setPage(nextPage);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
+  }
 
   async function handleUpload(e) {
     const file = e.target.files?.[0];
@@ -181,7 +197,7 @@ function LibraryTab() {
         </table>
       </div>
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, sort)} />
+      <Pagination page={page} pages={pages} total={total} loadingMore={loadingMore} onChange={p => load(p, sort)} onLoadMore={loadMore} />
     </>
   );
 }

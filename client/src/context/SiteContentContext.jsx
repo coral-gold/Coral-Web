@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import api from '../api';
 
-const DEFAULT_SETTINGS = { wholesalerEnabled: true, siteLockEnabled: false, showNetWeight: true, showGrossWeight: true, showAmount: true, productImageFit: 'cover' };
+const DEFAULT_SETTINGS = { wholesalerEnabled: true, siteLockEnabled: false, showNetWeight: true, showGrossWeight: true, showAmount: true, productImageFit: 'cover', paginationMode: 'classic' };
 
 const SiteContentCtx = createContext({ content: {}, settings: DEFAULT_SETTINGS, logoUrl: '/logo.png', locked: false, loaded: false, recheckLock: () => {} });
 

@@ -29,6 +29,7 @@ export default function Products() {
   const [pages,         setPages]         = useState(1);
   const [total,         setTotal]         = useState(0);
   const [loading,       setLoading]       = useState(false);
+  const [loadingMore,   setLoadingMore]   = useState(false);
   const [search,        setSearch]        = useState('');
   const [sort,          setSort]          = useState({ col: 'design_number', dir: 'asc' });
   const [modal,         setModal]         = useState(false);
@@ -37,6 +38,13 @@ export default function Products() {
   const [imageFile,     setImageFile]     = useState(null);
   const [editImageUrl,  setEditImageUrl]  = useState(null);
   const [saving,        setSaving]        = useState(false);
+  // Gallery: extra angle/close-up photos beyond the primary image, shown as
+  // a swipeable preview on the customer side (item 1). Only editable once a
+  // product has an id to attach them to — a brand-new "Add Product" has to
+  // be saved first.
+  const [galleryImages,    setGalleryImages]    = useState([]);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const galleryFileRef = useRef(null);
   // Bulk
   const [selected,      setSelected]      = useState(new Set());
   const [selectAllMatching, setSelectAllMatching] = useState(false); // true once "select all N matching" is applied
@@ -72,6 +80,23 @@ export default function Products() {
     }
   }
 
+  // Load More / infinite scroll (Batch 21 item 4) — appends the next page
+  // under the current search/sort instead of replacing, and leaves the
+  // bulk-selection state alone (rows already selected stay selected).
+  async function loadMore() {
+    if (page >= pages || loadingMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const d = await api.get(`/admin/products?page=${nextPage}&q=${encodeURIComponent(search)}&sort=${sort.col}&order=${sort.dir}`);
+    setLoadingMore(false);
+    if (d.ok) {
+      setProducts(prev => [...prev, ...d.products]);
+      setPage(nextPage);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
+  }
+
   function handleSort(col) {
     const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
     setSort(newSort);
@@ -95,7 +120,10 @@ export default function Products() {
 
   // ── Full edit modal ───────────────────────────────────────────────────────
 
-  function openAdd() { setForm(EMPTY); setEditId(null); setImageFile(null); setEditImageUrl(null); setModal(true); }
+  function openAdd() {
+    setForm(EMPTY); setEditId(null); setImageFile(null); setEditImageUrl(null);
+    setGalleryImages([]); setModal(true);
+  }
   function openEdit(p) {
     setForm({
       design_number: p.design_number || '',
@@ -109,6 +137,27 @@ export default function Products() {
       tags:          (p.tags || []).map(t => t.name).join(', '),
     });
     setEditId(p.id); setImageFile(null); setEditImageUrl(p.image_url || null); setModal(true);
+    setGalleryImages([]);
+    api.get(`/admin/products/${p.id}/images`).then(d => { if (d.ok) setGalleryImages(d.images); });
+  }
+
+  async function addGalleryImage(e) {
+    const file = e.target.files?.[0];
+    if (!file || !editId) return;
+    setGalleryUploading(true);
+    const fd = new FormData();
+    fd.append('image', file);
+    const d = await api.form(`/admin/products/${editId}/images`, fd);
+    setGalleryUploading(false);
+    if (d.ok) setGalleryImages(prev => [...prev, d.image]);
+    else show(d.error || 'Failed to add image.', 'error');
+    e.target.value = '';
+  }
+
+  async function deleteGalleryImage(imageId) {
+    const d = await api.del(`/admin/products/${editId}/images/${imageId}`);
+    if (d.ok) setGalleryImages(prev => prev.filter(img => img.id !== imageId));
+    else show(d.error || 'Failed to delete image.', 'error');
   }
 
   function toggleFormCategory(id) {
@@ -422,7 +471,7 @@ export default function Products() {
         </table>
       </div>
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => goToPage(p)} />
+      <Pagination page={page} pages={pages} total={total} loadingMore={loadingMore} onChange={p => goToPage(p)} onLoadMore={loadMore} />
 
       {modal && (
         <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setModal(false); }}>
@@ -507,6 +556,41 @@ export default function Products() {
                   />
                 )}
                 <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} />
+              </div>
+              <div className="form-group">
+                <label>
+                  Additional Images
+                  <span style={{ color: 'var(--mid)', fontWeight: 400 }}> (extra angles — shown as a swipeable gallery in the customer preview)</span>
+                </label>
+                {!editId ? (
+                  <p style={{ fontSize: 12, color: 'var(--mid)' }}>Save the product first, then add extra images here.</p>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {galleryImages.map(img => (
+                      <div key={img.id} style={{ position: 'relative', width: 60, height: 60 }}>
+                        <img
+                          src={img.url} alt="" onClick={() => openImage(img.url)} onError={handleImgError}
+                          style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, cursor: 'zoom-in', display: 'block' }}
+                        />
+                        <button
+                          type="button" onClick={() => deleteGalleryImage(img.id)} title="Remove"
+                          style={{
+                            position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%',
+                            background: 'var(--primary)', color: '#fff', border: '2px solid #fff', cursor: 'pointer',
+                            fontSize: 12, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                          }}
+                        >×</button>
+                      </div>
+                    ))}
+                    <button
+                      type="button" className="btn btn-outline btn-sm" onClick={() => galleryFileRef.current?.click()}
+                      disabled={galleryUploading}
+                    >
+                      {galleryUploading ? <><span className="spinner" />…</> : '+ Add Image'}
+                    </button>
+                    <input ref={galleryFileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={addGalleryImage} />
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-outline" onClick={() => setModal(false)}>Cancel</button>

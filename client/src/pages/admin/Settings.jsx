@@ -45,6 +45,7 @@ export default function Settings() {
     fd.append('show_amount',        s.showAmount        ? '1' : '0');
     fd.append('pdf_layout',         s.pdfLayout);
     fd.append('product_image_fit',  s.productImageFit);
+    fd.append('pagination_mode',    s.paginationMode);
     if (lockPassword) fd.append('site_lock_password', lockPassword);
     if (logoFile)     fd.append('logo', logoFile);
     if (faviconFile)  fd.append('favicon', faviconFile);
@@ -152,6 +153,32 @@ export default function Settings() {
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <input type="radio" name="product_image_fit" value={opt.v} checked={s.productImageFit === opt.v} onChange={() => set('productImageFit', opt.v)} />
+                  {opt.label}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--mid)', fontWeight: 400 }}>{opt.hint}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="admin-card">
+          <h3 style={{ marginBottom: 4 }}>Pagination Style</h3>
+          <p style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 12 }}>
+            How longer lists load further items — applies everywhere a list is paginated (catalogue, admin tables).
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[
+              { v: 'classic',   label: 'Classic',         hint: 'Prev / Next page buttons' },
+              { v: 'load_more', label: 'Load More',       hint: 'A button appends the next page' },
+              { v: 'infinite',  label: 'Infinite Scroll', hint: 'Auto-loads more while scrolling' },
+            ].map(opt => (
+              <label
+                key={opt.v}
+                className={`category-picker-item${s.paginationMode === opt.v ? ' checked' : ''}`}
+                style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '10px 14px', gap: 2, minWidth: 150 }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" name="pagination_mode" value={opt.v} checked={s.paginationMode === opt.v} onChange={() => set('paginationMode', opt.v)} />
                   {opt.label}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--mid)', fontWeight: 400 }}>{opt.hint}</span>

@@ -57,7 +57,7 @@ export default function Catalog() {
                     <CatalogImage
                       src={p.image} alt={p.designNo} loading="lazy"
                       imgClassName="pub-card-img" placeholderClassName="pub-card-img-placeholder"
-                      onClick={() => openImage(p.image)}
+                      onClick={() => openImage(p.images && p.images.length ? p.images : p.image)}
                     />
                     <div className="pub-card-body">
                       <div className="design-no">{p.designNo}</div>

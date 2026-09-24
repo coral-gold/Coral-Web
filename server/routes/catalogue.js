@@ -14,6 +14,22 @@ const { requireSiteUnlocked } = require('../middleware/siteLock');
 const PREVIEW_CATEGORIES = 6;
 const PREVIEW_PER_CATEGORY = 4;
 
+// Batches a product_images lookup for a set of product ids into
+// { [productId]: [url, ...] } — shared by every catalogue endpoint below so
+// each can build a product's full swipeable gallery (primary image first,
+// then any extra angles an admin has added — item 1).
+async function galleryUrlsByProduct(ids) {
+    if (!ids.length) return {};
+    const ph = ids.map(() => '?').join(',');
+    const [rows] = await db.query(
+        `SELECT product_id, image_path FROM product_images WHERE product_id IN (${ph}) ORDER BY sort_order, id`,
+        ids
+    );
+    const byProduct = {};
+    for (const r of rows) (byProduct[r.product_id] ??= []).push(storage.getPublicUrl(r.image_path));
+    return byProduct;
+}
+
 router.get('/preview', requireSiteUnlocked, async (req, res) => {
     try {
         const [cats] = await db.query(
@@ -33,12 +49,14 @@ router.get('/preview', requireSiteUnlocked, async (req, res) => {
                  ORDER BY p.created_at DESC LIMIT ?`,
                 [cat.id, PREVIEW_PER_CATEGORY]
             );
+            const extraByProduct = await galleryUrlsByProduct(rows.map(r => r.id));
             categories.push({
                 name: cat.name,
                 products: rows.map(p => ({
                     id: p.id,
                     designNo: p.design_number,
                     image: storage.getPublicUrl(p.image_path),
+                    images: [storage.getPublicUrl(p.image_path), ...(extraByProduct[p.id] || [])].filter(Boolean),
                 })),
             });
         }
@@ -64,10 +82,12 @@ router.get('/featured', requireSiteUnlocked, async (req, res) => {
              ORDER BY created_at DESC LIMIT ?`,
             [FEATURED_LIMIT]
         );
+        const extraByProduct = await galleryUrlsByProduct(rows.map(r => r.id));
         const products = rows.map(p => ({
             id:          p.id,
             designNo:    p.design_number,
             image:       storage.getPublicUrl(p.image_path),
+            images:      [storage.getPublicUrl(p.image_path), ...(extraByProduct[p.id] || [])].filter(Boolean),
             description: p.description,
         }));
         res.json({ ok: true, products });
@@ -146,6 +166,7 @@ router.get('/', requireParty, async (req, res) => {
             for (const r of tagRows) (tagsByProduct[r.product_id] ??= []).push(r.name);
         }
 
+        const extraByProduct = await galleryUrlsByProduct(ids);
         const products = rows.map(p => ({
             id:           p.id,
             designNo:     p.design_number,
@@ -155,6 +176,7 @@ router.get('/', requireParty, async (req, res) => {
             amount:       p.amount,
             stock:        p.quantity,
             image:        storage.getPublicUrl(p.image_path),
+            images:       [storage.getPublicUrl(p.image_path), ...(extraByProduct[p.id] || [])].filter(Boolean),
             description:  p.description,
             category:     p.category,
             categories:   catsByProduct[p.id] || [p.category],

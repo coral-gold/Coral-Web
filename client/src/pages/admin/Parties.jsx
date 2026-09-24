@@ -28,6 +28,7 @@ export default function Parties() {
   const [form,    setForm]    = useState(EMPTY);
   const [editId,  setEditId]  = useState(null);
   const [saving,  setSaving]  = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const { show } = useToast();
 
   // Real server-side pagination: fetch and render one page at a time.
@@ -38,6 +39,21 @@ export default function Parties() {
       if (d.parties.length === 0 && p > 1) return load(p - 1, s);
       setParties(d.parties);
       setPage(p);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
+  }
+
+  // Load More / infinite scroll (Batch 21 item 4) — appends the next page.
+  async function loadMore() {
+    if (page >= pages || loadingMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const d = await api.get(`/admin/parties?page=${nextPage}&sort=${sort.col}&order=${sort.dir}`);
+    setLoadingMore(false);
+    if (d.ok) {
+      setParties(prev => [...prev, ...d.parties]);
+      setPage(nextPage);
       setPages(d.pages || 1);
       setTotal(d.total || 0);
     }
@@ -132,7 +148,7 @@ export default function Parties() {
         </table>
       </div>
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, sort)} />
+      <Pagination page={page} pages={pages} total={total} loadingMore={loadingMore} onChange={p => load(p, sort)} onLoadMore={loadMore} />
 
       {modal && (
         <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setModal(false); }}>

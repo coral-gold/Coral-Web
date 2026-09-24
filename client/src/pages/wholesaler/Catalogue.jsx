@@ -12,7 +12,7 @@ import api from '../../api';
 const GRID_COLS_KEY = 'cg_wholesaler_grid_cols';
 
 function ProductCard({ product, inCart }) {
-  const { add } = useCart();
+  const { add, remove } = useCart();
   const { show } = useToast();
   const openImage = useLightbox();
   const { settings } = useSiteContent();
@@ -21,12 +21,23 @@ function ProductCard({ product, inCart }) {
   // Adding no longer auto-opens the quotation panel (item 6) — the sticky
   // "Generate Quotation" bar stays visible while browsing instead, so
   // adding several items in a row doesn't get interrupted each time.
-  async function handleAdd() {
+  // The button itself toggles Add ⇄ Remove once added (item 2), rather
+  // than locking once "in quotation" — one tap undoes a mis-tap.
+  async function handleToggle() {
     setLoading(true);
-    const d = await add(product.id);
+    const d = inCart ? await remove(product.id) : await add(product.id);
     setLoading(false);
-    if (d.ok) show('Added to quotation');
-    else show(d.error || 'Could not add item.', 'error');
+    if (d.ok) show(inCart ? 'Removed from quotation' : 'Added to quotation');
+    else show(d.error || 'Could not update quotation.', 'error');
+    return d.ok ? !inCart : inCart;
+  }
+
+  function preview() {
+    openImage({
+      images: product.images && product.images.length ? product.images : [product.image],
+      inCart,
+      onToggle: handleToggle,
+    });
   }
 
   return (
@@ -34,7 +45,7 @@ function ProductCard({ product, inCart }) {
       <CatalogImage
         src={product.image} alt={product.designNo} loading="lazy"
         imgClassName="product-card-img" placeholderClassName="product-card-placeholder"
-        onClick={() => openImage(product.image)}
+        onClick={preview}
       />
       <div className="product-card-body">
         {/* Priority order: Net Weight (most prominent), Gross Weight, Amount —
@@ -49,10 +60,10 @@ function ProductCard({ product, inCart }) {
           </div>
         )}
         <button
-          type="button" className="btn btn-primary btn-sm btn-add-cart"
-          onClick={handleAdd} disabled={loading || inCart}
+          type="button" className={`btn btn-sm btn-add-cart${inCart ? ' btn-remove-cart' : ' btn-primary'}`}
+          onClick={handleToggle} disabled={loading}
         >
-          {loading ? <><span className="spinner" />Adding…</> : inCart ? 'In Quotation' : 'Add to Quotation'}
+          {loading ? <><span className="spinner" />…</> : inCart ? 'Remove' : 'Add to Quotation'}
         </button>
       </div>
     </div>
@@ -82,6 +93,7 @@ export default function WholesalerCatalogue() {
   const [pages,      setPages]      = useState(1);
   const [total,      setTotal]      = useState(0);
   const [loading,    setLoading]    = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [gridCols,   setGridCols]   = useState(readStoredCols);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const debounce = useRef(null);
@@ -111,6 +123,28 @@ export default function WholesalerCatalogue() {
         setTotal(d.total || 0);
       }
     } finally { setLoading(false); }
+  }
+
+  // Load More / infinite scroll (Batch 21 item 4) — fetches the next page
+  // under the same active filters and appends rather than replacing.
+  async function loadMore() {
+    if (page >= pages || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const params = new URLSearchParams({ page: nextPage, search });
+      if (activeCat) params.set('category', activeCat);
+      if (activeTag) params.set('tag', activeTag);
+      if (netMin !== '' && netMin != null) params.set('netMin', netMin);
+      if (netMax !== '' && netMax != null) params.set('netMax', netMax);
+      const d = await api.get(`/catalogue?${params}`);
+      if (d.ok) {
+        setProducts(prev => [...prev, ...d.products]);
+        setPage(nextPage);
+        setPages(d.pages || 1);
+        setTotal(d.total || 0);
+      }
+    } finally { setLoadingMore(false); }
   }
 
   useEffect(() => { load(1, activeCat, activeTag, search, netMin, netMax); }, [activeCat, activeTag]);
@@ -236,7 +270,11 @@ export default function WholesalerCatalogue() {
         <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products found.</p>
       )}
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, activeCat, activeTag, search, netMin, netMax)} />
+      <Pagination
+        page={page} pages={pages} total={total} loadingMore={loadingMore}
+        onChange={p => load(p, activeCat, activeTag, search, netMin, netMax)}
+        onLoadMore={loadMore}
+      />
 
       {/* Clears the fixed sticky bar below so it never covers the last row. */}
       <div style={{ height: 76 }} />

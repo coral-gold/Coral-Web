@@ -57,6 +57,20 @@ async function runMigrations() {
             SELECT id, category_id FROM products
         `);
 
+        // Batch 21: extra gallery photos beyond products.image_path, feeding
+        // the swipeable image preview (item 1).
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS product_images (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                product_id INT NOT NULL,
+                image_path VARCHAR(255) NOT NULL,
+                sort_order INT NOT NULL DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                INDEX idx_product (product_id)
+            )
+        `);
+
         // Batch 18: Settings module — defaults for an already-deployed DB
         // (schema.sql's INSERT IGNORE only runs for a brand-new database).
         const SETTINGS_DEFAULTS = {
@@ -67,6 +81,8 @@ async function runMigrations() {
             show_gross_weight:       '1',
             show_amount:             '1',
             pdf_layout:              'grid2',
+            product_image_fit:       'cover',
+            pagination_mode:         'classic',
         };
         for (const [key, value] of Object.entries(SETTINGS_DEFAULTS)) {
             await db.query('INSERT IGNORE INTO content (key_name, value) VALUES (?, ?)', [key, value]);

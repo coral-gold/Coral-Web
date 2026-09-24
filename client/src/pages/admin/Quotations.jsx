@@ -26,13 +26,10 @@ export default function AdminQuotations() {
   const [search,     setSearch]     = useState('');
   const [sort,       setSort]       = useState({ col: 'created_at', dir: 'desc' });
   const [loading,    setLoading]    = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const debounce = React.useRef(null);
 
-  // Real server-side pagination: fetch and render one page at a time.
-  async function load(opts = {}) {
-    setLoading(true);
-    const p = opts.page || 1;
-    const s = opts.sort || sort;
+  function buildParams(p, s) {
     const params = new URLSearchParams();
     if (search) params.set('q', search);
     if (from) params.set('date_from', from);
@@ -40,11 +37,34 @@ export default function AdminQuotations() {
     params.set('page', p);
     params.set('sort', s.col);
     params.set('order', s.dir);
-    const d = await api.get(`/admin/quotations?${params}`);
+    return params;
+  }
+
+  // Real server-side pagination: fetch and render one page at a time.
+  async function load(opts = {}) {
+    setLoading(true);
+    const p = opts.page || 1;
+    const s = opts.sort || sort;
+    const d = await api.get(`/admin/quotations?${buildParams(p, s)}`);
     setLoading(false);
     if (d.ok) {
       setQuotations(d.quotations);
       setPage(p);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
+  }
+
+  // Load More / infinite scroll (Batch 21 item 4) — appends the next page.
+  async function loadMore() {
+    if (page >= pages || loadingMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const d = await api.get(`/admin/quotations?${buildParams(nextPage, sort)}`);
+    setLoadingMore(false);
+    if (d.ok) {
+      setQuotations(prev => [...prev, ...d.quotations]);
+      setPage(nextPage);
       setPages(d.pages || 1);
       setTotal(d.total || 0);
     }
@@ -127,7 +147,7 @@ export default function AdminQuotations() {
         </table>
       </div>
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => load({ page: p, sort })} />
+      <Pagination page={page} pages={pages} total={total} loadingMore={loadingMore} onChange={p => load({ page: p, sort })} onLoadMore={loadMore} />
     </AdminLayout>
   );
 }

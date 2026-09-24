@@ -11,10 +11,11 @@ const { requireSiteUnlocked } = require('../middleware/siteLock');
 router.get('/settings', async (req, res) => {
     try {
         const [rows] = await db.query(
-            "SELECT key_name, value FROM content WHERE key_name IN ('wholesaler_enabled','site_lock_enabled','show_net_weight','show_gross_weight','show_amount','product_image_fit')"
+            "SELECT key_name, value FROM content WHERE key_name IN ('wholesaler_enabled','site_lock_enabled','show_net_weight','show_gross_weight','show_amount','product_image_fit','pagination_mode')"
         );
         const raw = Object.fromEntries(rows.map(r => [r.key_name, r.value]));
         const IMAGE_FIT_MODES = ['cover', 'contain', 'fill', 'scale-down'];
+        const PAGINATION_MODES = ['classic', 'load_more', 'infinite'];
         res.json({
             ok: true,
             settings: {
@@ -24,12 +25,13 @@ router.get('/settings', async (req, res) => {
                 showGrossWeight:   raw.show_gross_weight !== '0',
                 showAmount:        raw.show_amount       !== '0',
                 productImageFit:   IMAGE_FIT_MODES.includes(raw.product_image_fit) ? raw.product_image_fit : 'cover',
+                paginationMode:    PAGINATION_MODES.includes(raw.pagination_mode) ? raw.pagination_mode : 'classic',
             },
         });
     } catch (e) {
         // Before first DB setup, or on an older DB pre-migration — the public
         // site should still render with sensible defaults, not break.
-        res.json({ ok: true, settings: { wholesalerEnabled: true, siteLockEnabled: false, showNetWeight: true, showGrossWeight: true, showAmount: true, productImageFit: 'cover' } });
+        res.json({ ok: true, settings: { wholesalerEnabled: true, siteLockEnabled: false, showNetWeight: true, showGrossWeight: true, showAmount: true, productImageFit: 'cover', paginationMode: 'classic' } });
     }
 });
 
