@@ -32,6 +32,7 @@ export default function Import() {
   const [preview,     setPreview]    = useState(null);   // { fileId, headers, suggestions, rowCount }
   const [mapping,     setMapping]    = useState({});     // { header: fieldName | '' }
   const [result,      setResult]     = useState(null);
+  const [runProgress, setRunProgress]= useState(null);   // { done, total, step }
   const [imgProgress, setImgProgress]= useState(null);   // { done, total, matched, skipped }
   const { show } = useToast();
   const folderRef = useRef(null);
@@ -65,17 +66,31 @@ export default function Import() {
     const jewel = Object.values(mapping).includes('jewel_code');
     if (!jewel) { show('You must map a column to "Jewel Code" before importing.', 'error'); return; }
     setStep(STEP.RUNNING);
+    setRunProgress(null);
 
+    // Start background job — server responds immediately with jobId
     const d = await api.post('/admin/import/run', { fileId: preview.fileId, mapping, strategy });
     if (!d.ok) { show(d.error || 'Import failed', 'error'); setStep(STEP.MAP); return; }
 
-    setResult(d);
-    show(`Done: ${d.inserted} new, ${d.updated} updated`);
+    // Poll job status every 600ms until done
+    let jobResult;
+    while (true) {
+      await new Promise(r => setTimeout(r, 600));
+      let status;
+      try { status = await api.get(`/admin/jobs/${d.jobId}`); } catch (_) { continue; }
+      if (!status || !status.ok) continue;
+      if (status.progress) setRunProgress(status.progress);
+      if (status.status === 'done') { jobResult = status.result; break; }
+      if (status.status === 'error') { show(status.error || 'Import failed', 'error'); setStep(STEP.MAP); return; }
+    }
+
+    setResult(jobResult);
+    show(`Done: ${jobResult.inserted} new, ${jobResult.updated} updated`);
 
     // If images folder selected and imageMap returned, go to image upload step
-    if (imgFolder && d.imageMap && d.imageMap.length > 0) {
+    if (imgFolder && jobResult.imageMap && jobResult.imageMap.length > 0) {
       setStep(STEP.IMAGES);
-      await uploadImages(d.imageMap, imgFolder);
+      await uploadImages(jobResult.imageMap, imgFolder);
     } else {
       setStep(STEP.DONE);
     }
@@ -288,9 +303,26 @@ export default function Import() {
 
       {/* ── STEP 3: Running ── */}
       {step === STEP.RUNNING && (
-        <div className="admin-card" style={{ maxWidth: 400, textAlign: 'center' }}>
-          <span className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
-          <p style={{ marginTop: 16, color: 'var(--mid)' }}>Importing products…</p>
+        <div className="admin-card" style={{ maxWidth: 440 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <span className="spinner" style={{ width: 22, height: 22, borderWidth: 3, flexShrink: 0 }} />
+            <span style={{ color: 'var(--mid)', fontSize: 14 }}>
+              {runProgress ? runProgress.step : 'Starting import…'}
+            </span>
+          </div>
+          {runProgress && runProgress.total > 0 && (
+            <>
+              <div style={{ background: 'rgba(0,0,0,0.07)', borderRadius: 6, height: 10, overflow: 'hidden', marginBottom: 8 }}>
+                <div style={{
+                  height: '100%', background: 'var(--garnet)', transition: 'width .3s',
+                  width: `${Math.round((runProgress.done / runProgress.total) * 100)}%`
+                }} />
+              </div>
+              <p style={{ fontSize: 13, color: 'var(--mid)', margin: 0 }}>
+                {runProgress.done} / {runProgress.total} rows processed
+              </p>
+            </>
+          )}
         </div>
       )}
 

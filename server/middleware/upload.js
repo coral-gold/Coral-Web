@@ -3,9 +3,14 @@ const multer = require('multer');
 const path   = require('path');
 const fs     = require('fs');
 
-const UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
+// Set UPLOAD_DIR env var to a path OUTSIDE the app directory (e.g. /home/u123456/uploads)
+// so images survive git-pull deployments. Defaults to assets/uploads inside the repo.
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+    ? path.resolve(process.env.UPLOAD_DIR)
+    : path.join(__dirname, '../../assets/uploads');
 
-// Memory storage for all image uploads — sharp processes before writing to disk
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
 const imageUpload = multer({
     storage: multer.memoryStorage(),
     limits:  { fileSize: 15 * 1024 * 1024 },
@@ -25,8 +30,8 @@ const xlsxUpload = multer({
     }
 });
 
-// Process buffer with sharp (compress + resize), then save to uploads dir.
-// Falls back to raw save if sharp is unavailable.
+// Compress with sharp: 800px max, quality 75 — same approach as WordPress thumbnail generation.
+// Falls back to saving original if sharp is unavailable.
 async function saveImage(file) {
     const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
     const basename = Date.now() + '-' + safeName.replace(/\.[^.]+$/, '');
@@ -35,12 +40,11 @@ async function saveImage(file) {
         const filename = basename + '.jpg';
         const filepath = path.join(UPLOAD_DIR, filename);
         await sharp(file.buffer)
-            .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-            .jpeg({ quality: 82 })
+            .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 75 })
             .toFile(filepath);
         return filename;
     } catch (e) {
-        // sharp unavailable: save original unchanged
         const ext = path.extname(file.originalname) || '.jpg';
         const filename = basename + ext;
         fs.writeFileSync(path.join(UPLOAD_DIR, filename), file.buffer);
@@ -48,4 +52,4 @@ async function saveImage(file) {
     }
 }
 
-module.exports = { imageUpload, xlsxUpload, saveImage };
+module.exports = { imageUpload, xlsxUpload, saveImage, UPLOAD_DIR };

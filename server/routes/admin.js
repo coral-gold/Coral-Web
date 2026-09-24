@@ -6,12 +6,24 @@ const fs      = require('fs');
 const XLSX    = require('xlsx');
 const db      = require('../db');
 const { requireAdmin }  = require('../middleware/auth');
-const { imageUpload, xlsxUpload, saveImage } = require('../middleware/upload');
+const { imageUpload, xlsxUpload, saveImage, UPLOAD_DIR } = require('../middleware/upload');
 const { generateQuotationPDF }    = require('../pdf');
 
-const UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
-
 router.use(requireAdmin);
+
+// ── Background job store ───────────────────────────────────────────────────────
+// Simple in-memory job store. Client polls GET /admin/jobs/:jobId for status.
+const jobs = new Map(); // jobId → { status, progress, result, error, startedAt }
+setInterval(() => {
+    const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+    for (const [id, j] of jobs) if (j.startedAt < cutoff) jobs.delete(id);
+}, 15 * 60 * 1000);
+
+router.get('/jobs/:jobId', (req, res) => {
+    const job = jobs.get(req.params.jobId);
+    if (!job) return res.json({ ok: false, error: 'Job not found or expired.' });
+    res.json({ ok: true, status: job.status, progress: job.progress, result: job.result, error: job.error });
+});
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
 
@@ -195,12 +207,11 @@ router.post('/products/bulk', async (req, res) => {
                 `SELECT id, image_path FROM products WHERE id IN (${ph}) AND image_path IS NOT NULL AND image_path != ''`,
                 safeIds
             );
-            for (const row of rows) {
-                try {
-                    const imgPath = path.join(UPLOAD_DIR, path.basename(row.image_path));
-                    if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
-                } catch (_) {}
-            }
+            // Delete files in parallel with async fs (non-blocking)
+            await Promise.all(rows.map(row => {
+                const imgPath = path.join(UPLOAD_DIR, path.basename(row.image_path));
+                return fs.promises.unlink(imgPath).catch(() => {});
+            }));
             await db.query(`UPDATE products SET image_path = NULL WHERE id IN (${ph})`, safeIds);
             return res.json({ ok: true, affected: safeIds.length });
         }
@@ -308,7 +319,8 @@ router.delete('/media/:filename', (req, res) => {
     } catch (e) { res.json({ ok: false, error: e.message }); }
 });
 
-// Step 2: Run import using admin-supplied column mapping
+// Step 2: Start import as a background job — returns { ok, jobId } immediately.
+// Client polls GET /admin/jobs/:jobId for progress and result.
 // Body: { fileId, mapping, strategy: 'skip'|'fill'|'merge'|'replace' }
 router.post('/import/run', async (req, res) => {
     const { fileId, mapping, strategy } = req.body || {};
@@ -319,11 +331,17 @@ router.post('/import/run', async (req, res) => {
 
     const temp = importTemp.get(fileId);
     if (!temp) return res.json({ ok: false, error: 'File session expired (30 min). Please re-upload.' });
+    importTemp.delete(fileId); // consume immediately
 
     const wb   = XLSX.read(temp.buffer, { type: 'buffer' });
     const ws   = wb.Sheets[wb.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    if (data.length < 2) return res.json({ ok: true, inserted: 0, updated: 0, skipped: 0, errors: [], imageMap: [] });
+
+    if (data.length < 2) {
+        const jobId = require('crypto').randomUUID();
+        jobs.set(jobId, { status: 'done', progress: { done: 0, total: 0, step: 'Complete' }, result: { inserted: 0, updated: 0, skipped: 0, errors: [], imageMap: [] }, error: null, startedAt: Date.now() });
+        return res.json({ ok: true, jobId });
+    }
 
     const rawHeaders = data[0].map(h => String(h).trim());
     const col = {};
@@ -337,26 +355,49 @@ router.post('/import/run', async (req, res) => {
         return res.json({ ok: false, error: 'Jewel Code column must be mapped before running import.' });
     }
 
+    const totalRows = data.length - 1;
+    const jobId = require('crypto').randomUUID();
+    jobs.set(jobId, {
+        status: 'running',
+        progress: { done: 0, total: totalRows, step: 'Starting…' },
+        result: null, error: null, startedAt: Date.now()
+    });
+
+    // Fire-and-forget — client polls for progress
+    runImportJob(jobId, data, col, strat, totalRows).catch(e => {
+        const job = jobs.get(jobId);
+        if (job) { job.status = 'error'; job.error = e.message; }
+        console.error('[import/run job]', e);
+    });
+
+    res.json({ ok: true, jobId });
+});
+
+async function runImportJob(jobId, data, col, strat, totalRows) {
+    const job = jobs.get(jobId);
+    if (!job) return;
+
     let inserted = 0, updated = 0, skipped = 0;
-    const errors      = [];
-    const imageMap    = [];
-    const catCache    = {};
-    const seenInFile  = new Set(); // deduplicate by design_number within the file
+    const errors     = [];
+    const imageMap   = [];
+    const catCache   = {};
+    const seenInFile = new Set();
 
     for (let r = 1; r < data.length; r++) {
+        job.progress = { done: r - 1, total: totalRows, step: `Row ${r} of ${totalRows}` };
+
         const row       = data[r];
         const jewelCode = String(row[col.jewel_code] ?? '').trim();
         if (!jewelCode) { skipped++; continue; }
 
-        const designNo     = col.design_number !== undefined ? String(row[col.design_number] ?? '').trim() : '';
-        const finalDesign  = designNo || jewelCode;
-        const styleKey     = finalDesign.toLowerCase();
-        const catName      = col.category     !== undefined ? String(row[col.category]     ?? '').trim() : '';
-        const grossWt      = col.gross_weight !== undefined ? parseFloat(row[col.gross_weight]) || null  : null;
-        const netWt        = col.net_weight   !== undefined ? parseFloat(row[col.net_weight])   || null  : null;
-        const descr        = col.description  !== undefined ? String(row[col.description]  ?? '').trim() || null : null;
+        const designNo    = col.design_number !== undefined ? String(row[col.design_number] ?? '').trim() : '';
+        const finalDesign = designNo || jewelCode;
+        const styleKey    = finalDesign.toLowerCase();
+        const catName     = col.category     !== undefined ? String(row[col.category]     ?? '').trim() : '';
+        const grossWt     = col.gross_weight !== undefined ? parseFloat(row[col.gross_weight]) || null : null;
+        const netWt       = col.net_weight   !== undefined ? parseFloat(row[col.net_weight])   || null : null;
+        const descr       = col.description  !== undefined ? String(row[col.description]  ?? '').trim() || null : null;
 
-        // Add to imageMap once per design_number (first occurrence only)
         if (!seenInFile.has(styleKey)) {
             const imgEntry = { jewel_code: jewelCode, design_number: finalDesign };
             if (col.image_path !== undefined) {
@@ -367,12 +408,10 @@ router.post('/import/run', async (req, res) => {
             imageMap.push(imgEntry);
         }
 
-        // Only process the first occurrence of each design_number per file
         if (seenInFile.has(styleKey)) { skipped++; continue; }
         seenInFile.add(styleKey);
 
         try {
-            // Resolve category
             let catId = catName ? catCache[catName] : null;
             if (!catId && catName) {
                 await db.query('INSERT IGNORE INTO categories (name) VALUES (?)', [catName]);
@@ -394,7 +433,6 @@ router.post('/import/run', async (req, res) => {
                 catId = catCache[''];
             }
 
-            // Check for existing product by design_number (the unique identity key)
             const [[existing]] = await db.query(
                 'SELECT id, jewel_code, category_id, gross_weight, net_weight, description FROM products WHERE design_number = ?',
                 [finalDesign]
@@ -410,7 +448,6 @@ router.post('/import/run', async (req, res) => {
             } else if (strat === 'skip') {
                 skipped++;
             } else if (strat === 'fill') {
-                // Only fill fields that are currently blank
                 const sets = [], vals = [];
                 if (!existing.jewel_code   && jewelCode) { sets.push('jewel_code = ?');   vals.push(jewelCode); }
                 if (!existing.category_id  && catId)     { sets.push('category_id = ?');  vals.push(catId); }
@@ -422,7 +459,6 @@ router.post('/import/run', async (req, res) => {
                     updated++;
                 } else { skipped++; }
             } else if (strat === 'merge') {
-                // New value wins if non-empty, else keep existing
                 await db.query(
                     `UPDATE products SET
                        jewel_code   = COALESCE(NULLIF(?, ''), jewel_code),
@@ -449,9 +485,10 @@ router.post('/import/run', async (req, res) => {
         }
     }
 
-    importTemp.delete(fileId);
-    res.json({ ok: true, inserted, updated, skipped, errors, imageMap });
-});
+    job.status   = 'done';
+    job.progress = { done: totalRows, total: totalRows, step: 'Complete' };
+    job.result   = { inserted, updated, skipped, errors, imageMap };
+}
 
 // Extract the first filename from an ERP image path like \SavedImage\BG\BG0245.jpeg
 function extractImageFilename(pathValue) {
@@ -466,18 +503,33 @@ function extractImageFilename(pathValue) {
     return (last && /\.[a-zA-Z0-9]+$/.test(last)) ? last : null;
 }
 
-// Step 3 (optional): Upload individual product image matched from local folder
+// Step 3 (optional): Upload individual product image, match by design_number.
+// Send force=1 to overwrite an existing image (used by standalone Bulk Image Import).
+// Without force, only attaches if product currently has no image (Excel import behavior).
 router.post('/import/images', imageUpload.single('image'), async (req, res) => {
-    const { design_number } = req.body;
+    const { design_number, force } = req.body;
     if (!design_number || !req.file) return res.json({ ok: false, error: 'design_number and image required.' });
     try {
         const filename = await saveImage(req.file);
-        // Only attach image if the product currently has no image (strategy-independent rule)
-        await db.query(
-            `UPDATE products SET image_path = ? WHERE design_number = ? AND (image_path IS NULL OR image_path = '')`,
-            [filename, design_number]
-        );
-        res.json({ ok: true, filename });
+        let affectedRows;
+        if (force === '1' || force === 'true') {
+            const [r] = await db.query(
+                `UPDATE products SET image_path = ? WHERE design_number = ?`,
+                [filename, design_number]
+            );
+            affectedRows = r.affectedRows;
+        } else {
+            const [r] = await db.query(
+                `UPDATE products SET image_path = ? WHERE design_number = ? AND (image_path IS NULL OR image_path = '')`,
+                [filename, design_number]
+            );
+            affectedRows = r.affectedRows;
+        }
+        // Remove orphan file when no product matched
+        if (affectedRows === 0) {
+            fs.promises.unlink(path.join(UPLOAD_DIR, filename)).catch(() => {});
+        }
+        res.json({ ok: true, filename, matched: affectedRows > 0 });
     } catch (e) {
         console.error(e);
         res.json({ ok: false, error: e.message });
