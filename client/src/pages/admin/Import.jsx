@@ -76,23 +76,23 @@ export default function Import() {
   // ── Step 4: image upload ──────────────────────────────────────────────────
 
   async function uploadImages(imageMap, folderFiles) {
-    // Build filename → File lookup (case-insensitive, all subfolders flattened by bare name)
+    // Index all files by stem (filename without extension), case-insensitive.
+    // webkitdirectory gives bare f.name for files inside any subfolder depth,
+    // so this naturally covers WTDC/, BG/, ER/, etc. without any folder-name matching.
     const fileIndex = {};
     for (const f of folderFiles) {
-      fileIndex[f.name.toLowerCase()] = f;
+      const stem = f.name.toLowerCase().replace(/\.[^.]+$/, '');
+      if (stem) fileIndex[stem] = f;
     }
 
     let done = 0, matched = 0, skipped = 0;
     setImgProgress({ done: 0, total: imageMap.length, matched: 0, skipped: 0 });
 
     for (const { jewel_code, design_number } of imageMap) {
-      // Match by design_number (= Style Number = image filename without extension)
-      const dn = (design_number || jewel_code).toLowerCase();
-      const file = fileIndex[dn + '.jpg']
-        || fileIndex[dn + '.jpeg']
-        || fileIndex[dn + '.png']
-        || fileIndex[dn + '.webp']
-        || fileIndex[dn + '.gif'];
+      // Match solely by Design Number (Style Number) = image filename stem.
+      // Category column and subfolder name are irrelevant — never compared.
+      const dn = (design_number || jewel_code).toLowerCase().trim();
+      const file = fileIndex[dn];
 
       if (file) {
         const fd = new FormData();
@@ -177,8 +177,9 @@ export default function Import() {
                 }
               </div>
               <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 6 }}>
-                Select the parent folder containing category subfolders (e.g. select "SavedImage" which contains "WTDC/", "BG/", etc.).
-                Images are matched by filename = Design Number (Style Number).
+                Select the parent folder that contains your category subfolders (e.g. select "SavedImage" which contains "WTDC/", "BG/", "ER/", etc.).
+                Each image is matched by its filename (without extension) against the product's Design Number / Style Number.
+                Subfolder names and the Category column are not used for matching.
               </p>
             </div>
 
