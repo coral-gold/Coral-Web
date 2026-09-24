@@ -9,43 +9,35 @@ import { useLightbox } from '../../components/ImageLightbox';
 import { useSiteContent } from '../../context/SiteContentContext';
 import api from '../../api';
 
-const GRID_COLS_KEY = 'cg_wholesaler_grid_cols';
+const VIEW_KEY = 'cg_wholesaler_grid_cols';
+const GRID_VIEWS = [1, 2, 3, 4];
 
-function ProductCard({ product, inCart }) {
-  const { add, remove } = useCart();
-  const { show } = useToast();
-  const openImage = useLightbox();
-  const { settings } = useSiteContent();
+function AddButton({ product, inCart, onToggle, className = '' }) {
   const [loading, setLoading] = useState(false);
-
-  // Adding no longer auto-opens the quotation panel (item 6) — the sticky
-  // "Generate Quotation" bar stays visible while browsing instead, so
-  // adding several items in a row doesn't get interrupted each time.
-  // The button itself toggles Add ⇄ Remove once added (item 2), rather
-  // than locking once "in quotation" — one tap undoes a mis-tap.
-  async function handleToggle() {
+  async function handleClick() {
     setLoading(true);
-    const d = inCart ? await remove(product.id) : await add(product.id);
+    await onToggle(product, inCart);
     setLoading(false);
-    if (d.ok) show(inCart ? 'Removed from quotation' : 'Added to quotation');
-    else show(d.error || 'Could not update quotation.', 'error');
-    return d.ok ? !inCart : inCart;
   }
+  return (
+    <button
+      type="button" className={`btn btn-sm btn-add-cart${inCart ? ' btn-remove-cart' : ' btn-primary'} ${className}`}
+      onClick={handleClick} disabled={loading}
+    >
+      {loading ? <><span className="spinner" />…</> : inCart ? 'Remove' : 'Add to Quotation'}
+    </button>
+  );
+}
 
-  function preview() {
-    openImage({
-      images: product.images && product.images.length ? product.images : [product.image],
-      inCart,
-      onToggle: handleToggle,
-    });
-  }
+function ProductCard({ product, inCart, onToggle, onPreview }) {
+  const { settings } = useSiteContent();
 
   return (
     <div className={`product-card${inCart ? ' in-cart' : ''}`}>
       <CatalogImage
         src={product.image} alt={product.designNo} loading="lazy"
         imgClassName="product-card-img" placeholderClassName="product-card-placeholder"
-        onClick={preview}
+        onClick={() => onPreview(product.id)}
       />
       <div className="product-card-body">
         {/* Priority order: Net Weight (most prominent), Gross Weight, Amount —
@@ -59,27 +51,62 @@ function ProductCard({ product, inCart }) {
             {product.tags.slice(0, 3).map(t => <span key={t} className="product-tag-chip">{t}</span>)}
           </div>
         )}
-        <button
-          type="button" className={`btn btn-sm btn-add-cart${inCart ? ' btn-remove-cart' : ' btn-primary'}`}
-          onClick={handleToggle} disabled={loading}
-        >
-          {loading ? <><span className="spinner" />…</> : inCart ? 'Remove' : 'Add to Quotation'}
-        </button>
+        <AddButton product={product} inCart={inCart} onToggle={onToggle} />
       </div>
     </div>
   );
 }
 
-function readStoredCols() {
+// List view — the same dense, functional-first table style as Admin's
+// Products list (item 1), for parties who'd rather scan rows than cards.
+function ProductListRow({ product, inCart, onToggle, onPreview }) {
+  const { settings } = useSiteContent();
+  return (
+    <tr className={inCart ? 'catalogue-list-row-in-cart' : ''}>
+      <td style={{ width: 56 }}>
+        <CatalogImage
+          src={product.image} alt={product.designNo} loading="lazy"
+          imgClassName="catalogue-list-img" placeholderClassName="catalogue-list-img-placeholder"
+          onClick={() => onPreview(product.id)}
+        />
+      </td>
+      <td>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--secondary)' }}>{product.designNo}</div>
+        <div style={{ fontSize: 11, color: 'var(--mid)' }}>{product.jewelCode}</div>
+      </td>
+      {settings.showNetWeight   && <td style={{ whiteSpace: 'nowrap' }}>{product.netWeight}g</td>}
+      {settings.showGrossWeight && <td style={{ whiteSpace: 'nowrap' }}>{product.grossWeight}g</td>}
+      {settings.showAmount      && <td>{product.amount || '—'}</td>}
+      <td>
+        {product.tags && product.tags.length > 0 && (
+          <div className="product-tags" style={{ margin: 0 }}>
+            {product.tags.slice(0, 3).map(t => <span key={t} className="product-tag-chip">{t}</span>)}
+          </div>
+        )}
+      </td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <AddButton product={product} inCart={inCart} onToggle={onToggle} className="catalogue-list-add-btn" />
+      </td>
+    </tr>
+  );
+}
+
+function readStoredView() {
   try {
-    const v = parseInt(localStorage.getItem(GRID_COLS_KEY), 10);
-    return [2, 3, 4].includes(v) ? v : 3;
-  } catch { return 3; }
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === 'list') return 'list';
+    const n = parseInt(v, 10);
+    if (GRID_VIEWS.includes(n)) return n;
+  } catch {}
+  // First-time visitors (no stored preference) default to List view (item 1).
+  return 'list';
 }
 
 export default function WholesalerCatalogue() {
-  const { cart } = useCart();
+  const { cart, add, remove } = useCart();
   const { settings } = useSiteContent();
+  const { show } = useToast();
+  const openImage = useLightbox();
   const [products,   setProducts]   = useState([]);
   const [categories, setCategories] = useState([]);
   const [tags,        setTags]       = useState([]);
@@ -94,7 +121,7 @@ export default function WholesalerCatalogue() {
   const [total,      setTotal]      = useState(0);
   const [loading,    setLoading]    = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [gridCols,   setGridCols]   = useState(readStoredCols);
+  const [view,       setView]       = useState(readStoredView);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const debounce = useRef(null);
 
@@ -153,13 +180,47 @@ export default function WholesalerCatalogue() {
     debounce.current = setTimeout(() => { load(1, activeCat, activeTag, search, netMin, netMax); }, 350);
   }, [search, netMin, netMax]);
 
-  function changeGridCols(n) {
-    setGridCols(n);
-    try { localStorage.setItem(GRID_COLS_KEY, String(n)); } catch {}
+  function changeView(v) {
+    setView(v);
+    try { localStorage.setItem(VIEW_KEY, String(v)); } catch {}
   }
 
   const inCartIds = new Set(cart.lines.map(l => l.productId));
   const activeFilterCount = (activeCat ? 1 : 0) + (activeTag ? 1 : 0) + (netMin !== '' || netMax !== '' ? 1 : 0);
+
+  // Adding no longer auto-opens the quotation panel (Batch 19 item 6) — the
+  // sticky "Generate Quotation" bar stays visible while browsing instead.
+  // The button itself toggles Add ⇄ Remove once added (Batch 21 item 2),
+  // shared by the card/row button and the lightbox's own button below.
+  async function toggleCart(product, inCart) {
+    const d = inCart ? await remove(product.id) : await add(product.id);
+    if (d.ok) show(inCart ? 'Removed from quotation' : 'Added to quotation');
+    else show(d.error || 'Could not update quotation.', 'error');
+    return d.ok ? !inCart : inCart;
+  }
+
+  // Opens the preview on the clicked product, primed with every other
+  // currently-loaded product too — swiping right/left inside the preview
+  // pages through the whole catalog Tinder-style, not just this one
+  // product's own photos (item 2), and Add to Quotation works from there
+  // without ever closing the dialog.
+  function openPreview(productId) {
+    const withImages = products
+      .filter(p => (p.images && p.images.length) || p.image)
+      .map(p => ({
+        id: p.id,
+        images: p.images && p.images.length ? p.images : [p.image],
+        inCart: inCartIds.has(p.id),
+        label: p.designNo,
+      }));
+    const index = withImages.findIndex(p => p.id === productId);
+    if (index === -1) return;
+    openImage({
+      products: withImages,
+      index,
+      onToggle: p => toggleCart(p, p.inCart),
+    });
+  }
 
   return (
     <WholesalerLayout wide>
@@ -167,13 +228,19 @@ export default function WholesalerCatalogue() {
         <h1 style={{ fontFamily: "'Poppins', sans-serif", fontSize: 26, color: 'var(--garnet)', margin: 0 }}>
           Catalogue
         </h1>
-        <div className="grid-cols-picker" role="group" aria-label="Grid view">
-          {[2, 3, 4].map(n => (
+        <div className="grid-cols-picker" role="group" aria-label="Catalogue view">
+          <button
+            type="button" className={`grid-cols-btn${view === 'list' ? ' active' : ''}`}
+            onClick={() => changeView('list')} title="List view"
+          >
+            ☰ List
+          </button>
+          {GRID_VIEWS.map(n => (
             <button
               key={n} type="button"
-              className={`grid-cols-btn${gridCols === n ? ' active' : ''}`}
-              onClick={() => changeGridCols(n)}
-              title={`${n} × ${n} grid`}
+              className={`grid-cols-btn${view === n ? ' active' : ''}`}
+              onClick={() => changeView(n)}
+              title={n === 1 ? 'Single column' : `${n} × ${n} grid`}
             >
               {n}×{n}
             </button>
@@ -260,11 +327,34 @@ export default function WholesalerCatalogue() {
         <p style={{ color: 'var(--mid)' }}><span className="spinner-dark" />Loading…</p>
       )}
 
-      <div className={`product-grid cols-${gridCols}`}>
-        {products.map(p => (
-          <ProductCard key={p.id} product={p} inCart={inCartIds.has(p.id)} />
-        ))}
-      </div>
+      {view === 'list' ? (
+        <div className="table-wrap">
+          <table className="admin-table catalogue-list-table">
+            <thead>
+              <tr>
+                <th>Image</th>
+                <th>Design No. / Jewel Code</th>
+                {settings.showNetWeight   && <th>Net Wt.</th>}
+                {settings.showGrossWeight && <th>Gross Wt.</th>}
+                {settings.showAmount      && <th>Amount</th>}
+                <th>Tags</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map(p => (
+                <ProductListRow key={p.id} product={p} inCart={inCartIds.has(p.id)} onToggle={toggleCart} onPreview={openPreview} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className={`product-grid cols-${view}`}>
+          {products.map(p => (
+            <ProductCard key={p.id} product={p} inCart={inCartIds.has(p.id)} onToggle={toggleCart} onPreview={openPreview} />
+          ))}
+        </div>
+      )}
 
       {!loading && products.length === 0 && (
         <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products found.</p>

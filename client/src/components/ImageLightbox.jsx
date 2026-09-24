@@ -2,35 +2,62 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 
 const LightboxCtx = createContext(null);
 
-// Accepts every shape existing call sites already use, plus the new
-// gallery/add-to-quotation shape (item 1):
-//  - a plain URL string            → single-image preview, no Add button
-//  - an array of URL strings       → swipeable gallery, no Add button
-//  - { images, index?, canAdd?, inCart?, onToggle? } → full gallery + the
-//    inline Add/Remove toggle, used by the wholesaler catalogue card
+// Every call site funnels into one internal shape: a list of "products"
+// (each its own image or small gallery) plus a current product/image
+// position. That's what makes the Tinder-style catalog swipe (item 2) and
+// the older single-product gallery swipe (Batch 21 item 1) the same code
+// path — a single-product call is just a products list of length 1.
+//
+// Accepted inputs:
+//  - a plain URL string       → one product, one image
+//  - an array of URL strings  → one product, its own swipeable gallery
+//  - { images, index?, inCart?, onToggle? }
+//        → one product (Batch 21 shape) — swipe/arrows move through ITS
+//          images. Used where there's no "whole catalog" to page through:
+//          admin thumbnails, the public preview, a cart line item.
+//  - { products: [{ images, inCart?, ...}], index?, onToggle? }
+//        → the catalog itself (Batch 22 item 2) — swipe/arrows move
+//          PRODUCT to product; each product's own extra images (if any)
+//          are reachable via the dots instead, so the two gestures never
+//          collide. onToggle(product) is called with whichever product is
+//          currently showing.
 function normalize(arg) {
   if (!arg) return null;
-  if (typeof arg === 'string') return { images: [arg], index: 0 };
+  if (typeof arg === 'string') {
+    return { products: [{ images: [arg] }], productIndex: 0, imageIndex: 0 };
+  }
   if (Array.isArray(arg)) {
     const images = arg.filter(Boolean);
-    return images.length ? { images, index: 0 } : null;
+    return images.length ? { products: [{ images }], productIndex: 0, imageIndex: 0 } : null;
   }
   if (typeof arg === 'object') {
+    if (Array.isArray(arg.products)) {
+      const products = arg.products
+        .map(p => ({ ...p, images: (p.images || []).filter(Boolean) }))
+        .filter(p => p.images.length);
+      if (!products.length) return null;
+      const productIndex = Math.min(Math.max(arg.index || 0, 0), products.length - 1);
+      return { products, productIndex, imageIndex: 0, onToggle: arg.onToggle };
+    }
     const images = (arg.images || []).filter(Boolean);
     if (!images.length) return null;
-    const index = Math.min(Math.max(arg.index || 0, 0), images.length - 1);
-    return { images, index, canAdd: !!arg.onToggle, inCart: !!arg.inCart, onToggle: arg.onToggle };
+    const imageIndex = Math.min(Math.max(arg.index || 0, 0), images.length - 1);
+    return {
+      products: [{ images, inCart: !!arg.inCart }],
+      productIndex: 0, imageIndex,
+      onToggle: arg.onToggle ? () => arg.onToggle() : undefined,
+    };
   }
   return null;
 }
 
 // Mounted once at the app root. Any component can call useLightbox() to get
 // an openImage(arg) function — clicking a thumbnail anywhere in the app
-// opens the same shared full-size preview overlay, now with swipe/arrow
-// navigation through a product's whole gallery and, where the caller wires
-// it up, an inline Add/Remove Quotation button — no need to close the
-// preview first (item 1/2). Keeping every step inside one dialog matters
-// most for less tech-comfortable customers: fewer taps, one place to look.
+// opens the same shared full-size preview overlay, with swipe/arrow
+// navigation and, where the caller wires it up, an inline Add/Remove
+// Quotation button — no need to close the preview first. Keeping every step
+// inside one dialog matters most for less tech-comfortable customers: fewer
+// taps, one place to look, swipe-swipe-tap-add and keep going.
 export function ImageLightboxProvider({ children }) {
   const [state, setState] = useState(null);
   const touchStartX = useRef(null);
@@ -38,11 +65,20 @@ export function ImageLightboxProvider({ children }) {
 
   function openImage(arg) { setState(normalize(arg)); }
   function close() { setState(null); }
+
+  // Multi-product: swipe/arrows page PRODUCT to product (Tinder-style,
+  // item 2). Single-product: same gesture pages through that product's own
+  // gallery, same as Batch 21 — never both at once, so there's no gesture
+  // ambiguity about what a swipe will do.
   function go(delta) {
     setState(s => {
       if (!s) return s;
-      const n = s.images.length;
-      return { ...s, index: (s.index + delta + n) % n };
+      if (s.products.length > 1) {
+        const n = s.products.length;
+        return { ...s, productIndex: (s.productIndex + delta + n) % n, imageIndex: 0 };
+      }
+      const n = s.products[0].images.length;
+      return { ...s, imageIndex: (s.imageIndex + delta + n) % n };
     });
   }
 
@@ -66,67 +102,96 @@ export function ImageLightboxProvider({ children }) {
 
   async function handleToggle() {
     if (!state?.onToggle || state.adding) return;
+    const current = state.products[state.productIndex];
     setState(s => ({ ...s, adding: true }));
-    const nextInCart = await state.onToggle();
-    setState(s => (s ? { ...s, adding: false, inCart: typeof nextInCart === 'boolean' ? nextInCart : s.inCart } : s));
+    const nextInCart = await state.onToggle(current);
+    setState(s => {
+      if (!s) return s;
+      const products = s.products.slice();
+      products[s.productIndex] = {
+        ...products[s.productIndex],
+        inCart: typeof nextInCart === 'boolean' ? nextInCart : products[s.productIndex].inCart,
+      };
+      return { ...s, products, adding: false };
+    });
   }
+
+  if (!state) {
+    return <LightboxCtx.Provider value={openImage}>{children}</LightboxCtx.Provider>;
+  }
+
+  const multiProduct = state.products.length > 1;
+  const current = state.products[state.productIndex];
+  const canNavigate = multiProduct || current.images.length > 1;
 
   return (
     <LightboxCtx.Provider value={openImage}>
       {children}
-      {state && (
-        <div className="lightbox-backdrop" onClick={close}>
-          <button className="lightbox-close" onClick={close} aria-label="Close">×</button>
+      <div className="lightbox-backdrop" onClick={close}>
+        <button className="lightbox-close" onClick={close} aria-label="Close">×</button>
 
-          <div
-            className="lightbox-gallery"
-            onClick={e => e.stopPropagation()}
-            onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-          >
-            {state.images.length > 1 && (
-              <button className="lightbox-arrow lightbox-arrow-left" onClick={() => go(-1)} aria-label="Previous image">‹</button>
-            )}
-            <img src={state.images[state.index]} alt="" className="lightbox-img" />
-            {state.images.length > 1 && (
-              <button className="lightbox-arrow lightbox-arrow-right" onClick={() => go(1)} aria-label="Next image">›</button>
-            )}
+        {multiProduct && (
+          <div className="lightbox-product-counter" onClick={e => e.stopPropagation()}>
+            {state.productIndex + 1} / {state.products.length}
+            {current.label && <span className="lightbox-product-label">{current.label}</span>}
           </div>
+        )}
 
-          {state.images.length > 1 && (
-            <div className="lightbox-dots" onClick={e => e.stopPropagation()}>
-              {state.images.map((_, i) => (
-                <button
-                  key={i}
-                  className={`lightbox-dot${i === state.index ? ' active' : ''}`}
-                  onClick={() => setState(s => ({ ...s, index: i }))}
-                  aria-label={`Image ${i + 1} of ${state.images.length}`}
-                />
-              ))}
-            </div>
-          )}
-
-          {state.canAdd && (
+        <div
+          className="lightbox-gallery"
+          onClick={e => e.stopPropagation()}
+          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+        >
+          {canNavigate && (
             <button
-              type="button"
-              className={`lightbox-add-btn${state.inCart ? ' in-cart' : ''}`}
-              onClick={e => { e.stopPropagation(); handleToggle(); }}
-              disabled={state.adding}
-            >
-              {state.adding
-                ? <><span className="spinner" />…</>
-                : state.inCart ? 'Remove from Quotation' : 'Add to Quotation'}
-            </button>
+              className="lightbox-arrow lightbox-arrow-left" onClick={() => go(-1)}
+              aria-label={multiProduct ? 'Previous product' : 'Previous image'}
+            >‹</button>
+          )}
+          <img src={current.images[state.imageIndex]} alt="" className="lightbox-img" />
+          {canNavigate && (
+            <button
+              className="lightbox-arrow lightbox-arrow-right" onClick={() => go(1)}
+              aria-label={multiProduct ? 'Next product' : 'Next image'}
+            >›</button>
           )}
         </div>
-      )}
+
+        {current.images.length > 1 && (
+          <div className="lightbox-dots" onClick={e => e.stopPropagation()}>
+            {current.images.map((_, i) => (
+              <button
+                key={i}
+                className={`lightbox-dot${i === state.imageIndex ? ' active' : ''}`}
+                onClick={() => setState(s => ({ ...s, imageIndex: i }))}
+                aria-label={`Image ${i + 1} of ${current.images.length}`}
+              />
+            ))}
+          </div>
+        )}
+
+        {state.onToggle && (
+          <button
+            type="button"
+            className={`lightbox-add-btn${current.inCart ? ' in-cart' : ''}`}
+            onClick={e => { e.stopPropagation(); handleToggle(); }}
+            disabled={state.adding}
+          >
+            {state.adding
+              ? <><span className="spinner" />…</>
+              : current.inCart ? 'Remove from Quotation' : 'Add to Quotation'}
+          </button>
+        )}
+      </div>
     </LightboxCtx.Provider>
   );
 }
 
 // Returns openImage(arg) — call it from an onClick to preview an image, an
-// image array, or the full gallery/add-to-quotation object (see normalize
-// above). A falsy/empty arg is a no-op, so callers don't need to guard for
-// "no image yet".
+// image array, a single product's gallery/add-to-quotation object, or the
+// whole catalog to swipe product-to-product (see normalize above). A
+// falsy/empty arg is a no-op, so callers don't need to guard for "no image
+// yet".
 export function useLightbox() {
   return useContext(LightboxCtx);
 }
