@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import WholesalerLayout from '../../components/WholesalerLayout';
 import Pagination from '../../components/Pagination';
 import CatalogImage from '../../components/CatalogImage';
@@ -11,17 +12,20 @@ import api from '../../api';
 const GRID_COLS_KEY = 'cg_wholesaler_grid_cols';
 
 function ProductCard({ product, inCart }) {
-  const { add, setPanelOpen } = useCart();
+  const { add } = useCart();
   const { show } = useToast();
   const openImage = useLightbox();
   const { settings } = useSiteContent();
   const [loading, setLoading] = useState(false);
 
+  // Adding no longer auto-opens the quotation panel (item 6) — the sticky
+  // "Generate Quotation" bar stays visible while browsing instead, so
+  // adding several items in a row doesn't get interrupted each time.
   async function handleAdd() {
     setLoading(true);
     const d = await add(product.id);
     setLoading(false);
-    if (d.ok) { show('Added to quotation'); setPanelOpen(true); }
+    if (d.ok) show('Added to quotation');
     else show(d.error || 'Could not add item.', 'error');
   }
 
@@ -64,6 +68,7 @@ function readStoredCols() {
 
 export default function WholesalerCatalogue() {
   const { cart } = useCart();
+  const { settings } = useSiteContent();
   const [products,   setProducts]   = useState([]);
   const [categories, setCategories] = useState([]);
   const [tags,        setTags]       = useState([]);
@@ -71,6 +76,8 @@ export default function WholesalerCatalogue() {
   const [activeCat,  setActiveCat]  = useState('');
   const [activeTag,  setActiveTag]  = useState('');
   const [search,     setSearch]     = useState('');
+  const [netMin,     setNetMin]     = useState('');
+  const [netMax,     setNetMax]     = useState('');
   const [page,       setPage]       = useState(1);
   const [pages,      setPages]      = useState(1);
   const [total,      setTotal]      = useState(0);
@@ -87,12 +94,14 @@ export default function WholesalerCatalogue() {
 
   // Real server-side pagination — fetches and renders one page at a time,
   // same approach as the admin panel (Batch 15 item 3).
-  async function load(p, cat, tag, s) {
+  async function load(p, cat, tag, s, min, max) {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: p, search: s });
       if (cat) params.set('category', cat);
       if (tag) params.set('tag', tag);
+      if (min !== '' && min != null) params.set('netMin', min);
+      if (max !== '' && max != null) params.set('netMax', max);
       const d = await api.get(`/catalogue?${params}`);
       if (d.ok) {
         setProducts(d.products);
@@ -103,11 +112,11 @@ export default function WholesalerCatalogue() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(1, activeCat, activeTag, search); }, [activeCat, activeTag]);
+  useEffect(() => { load(1, activeCat, activeTag, search, netMin, netMax); }, [activeCat, activeTag]);
   useEffect(() => {
     clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { load(1, activeCat, activeTag, search); }, 350);
-  }, [search]);
+    debounce.current = setTimeout(() => { load(1, activeCat, activeTag, search, netMin, netMax); }, 350);
+  }, [search, netMin, netMax]);
 
   function changeGridCols(n) {
     setGridCols(n);
@@ -117,9 +126,9 @@ export default function WholesalerCatalogue() {
   const inCartIds = new Set(cart.lines.map(l => l.productId));
 
   return (
-    <WholesalerLayout>
+    <WholesalerLayout wide>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-        <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, color: 'var(--garnet)', margin: 0 }}>
+        <h1 style={{ fontFamily: "'Poppins', sans-serif", fontSize: 26, color: 'var(--garnet)', margin: 0 }}>
           Catalogue
         </h1>
         <div className="grid-cols-picker" role="group" aria-label="Grid view">
@@ -143,6 +152,26 @@ export default function WholesalerCatalogue() {
           value={search} onChange={e => setSearch(e.target.value)}
         />
       </div>
+
+      {settings.showNetWeight && (
+        <div className="weight-range-filter">
+          <span className="catalogue-filters-label">Net Wt. (g):</span>
+          <input
+            type="number" min="0" step="0.1" className="form-control form-control-sm"
+            placeholder="Min" value={netMin} onChange={e => setNetMin(e.target.value)}
+          />
+          <span className="weight-range-sep">–</span>
+          <input
+            type="number" min="0" step="0.1" className="form-control form-control-sm"
+            placeholder="Max" value={netMax} onChange={e => setNetMax(e.target.value)}
+          />
+          {(netMin !== '' || netMax !== '') && (
+            <button type="button" className="btn-link-clear" onClick={() => { setNetMin(''); setNetMax(''); }}>
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="catalogue-filters">
         {filtersLoading ? (
@@ -185,7 +214,19 @@ export default function WholesalerCatalogue() {
         <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products found.</p>
       )}
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, activeCat, activeTag, search)} />
+      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, activeCat, activeTag, search, netMin, netMax)} />
+
+      {/* Clears the fixed sticky bar below so it never covers the last row. */}
+      <div style={{ height: 76 }} />
+
+      {/* Always visible while browsing — takes the party straight to the
+          Quotation screen instead of auto-opening a panel on every add
+          (item 2/6). */}
+      <Link to="/wholesaler/quotation" className="sticky-quotation-bar">
+        <span className="sticky-quotation-icon">🛒</span>
+        Generate Quotation
+        {cart.itemCount > 0 && <span className="sticky-quotation-count">{cart.itemCount}</span>}
+      </Link>
     </WholesalerLayout>
   );
 }

@@ -77,11 +77,13 @@ router.get('/featured', requireSiteUnlocked, async (req, res) => {
     }
 });
 
-// GET /api/catalogue?page=1&category=&tag=&search= — wholesaler-only, full
-// catalogue with real server-side pagination (same page/pages/total shape
-// as the admin panel, not infinite-scroll). category/tag match a product
-// that belongs to ANY of the given values (a product can have several of
-// each) — repeat the query param for more than one, e.g. category=Rings&category=Bangles.
+// GET /api/catalogue?page=1&category=&tag=&search=&netMin=&netMax= —
+// wholesaler-only, full catalogue with real server-side pagination (same
+// page/pages/total shape as the admin panel, not infinite-scroll).
+// category/tag match a product that belongs to ANY of the given values (a
+// product can have several of each) — repeat the query param for more than
+// one, e.g. category=Rings&category=Bangles. netMin/netMax filter by net
+// weight (grams), either bound optional (Batch 19 item 3).
 router.get('/', requireParty, async (req, res) => {
     const page     = Math.max(1, parseInt(req.query.page) || 1);
     const per      = 24;
@@ -89,6 +91,8 @@ router.get('/', requireParty, async (req, res) => {
     const search   = (req.query.search || '').trim();
     const categories = [].concat(req.query.category || []).map(s => s.trim()).filter(Boolean);
     const tags        = [].concat(req.query.tag      || []).map(s => s.trim()).filter(Boolean);
+    const netMin = req.query.netMin !== undefined && req.query.netMin !== '' ? parseFloat(req.query.netMin) : null;
+    const netMax = req.query.netMax !== undefined && req.query.netMax !== '' ? parseFloat(req.query.netMax) : null;
 
     const conds  = ['p.active = 1'];
     const params = [];
@@ -106,6 +110,8 @@ router.get('/', requireParty, async (req, res) => {
         const like = `%${search}%`;
         params.push(like, like);
     }
+    if (netMin !== null && !isNaN(netMin)) { conds.push('p.net_weight >= ?'); params.push(netMin); }
+    if (netMax !== null && !isNaN(netMax)) { conds.push('p.net_weight <= ?'); params.push(netMax); }
 
     const where = 'WHERE ' + conds.join(' AND ');
 

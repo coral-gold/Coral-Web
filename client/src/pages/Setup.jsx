@@ -50,7 +50,7 @@ export default function Setup() {
       <div style={{ background: 'var(--surface)', borderRadius: 12, padding: '40px 36px', width: '100%', maxWidth: 460, boxShadow: '0 8px 40px rgba(0,0,0,.4)' }}>
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", color: 'var(--gold2)', fontSize: 26, fontWeight: 600, letterSpacing: 1, marginBottom: 6 }}>✦ Coral Gold</div>
+          <div style={{ fontFamily: "'Poppins', sans-serif", color: 'var(--gold2)', fontSize: 26, fontWeight: 600, letterSpacing: 1, marginBottom: 6 }}>✦ Coral Gold</div>
           <div style={{ fontSize: 13, color: 'var(--mid)' }}>First-Run Setup Wizard</div>
         </div>
 

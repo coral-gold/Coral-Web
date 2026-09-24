@@ -38,7 +38,7 @@ export default function Catalog() {
       </section>
 
       <section className="section">
-        <div className="container">
+        <div className="container-wide">
           {loading && <p style={{ color: 'var(--mid)', padding: '20px 0' }}>Loading…</p>}
 
           {!loading && categories.length === 0 && (

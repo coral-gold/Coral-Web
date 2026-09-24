@@ -6,6 +6,11 @@ import { handleLogoError } from '../utils/image';
 import { useToast } from './Toast';
 import api from '../api';
 
+// Main section nav — lives in exactly one place, the sidebar (rendered as a
+// horizontally-scrollable bar on mobile, see .admin-mobile-nav). Settings,
+// Change Password, Logout and the Wholesaler Login shortcut are account/
+// cross-portal actions, not sections, so they live only in the top bar —
+// nothing here is duplicated between the two (Batch 19 item 7).
 const NAV = [
   { to: '/admin/dashboard',   label: 'Dashboard' },
   { to: '/admin/categories',  label: 'Categories' },
@@ -14,7 +19,6 @@ const NAV = [
   { to: '/admin/parties',     label: 'Parties' },
   { to: '/admin/quotations',  label: 'Quotations' },
   { to: '/admin/content',     label: 'Content' },
-  { to: '/admin/settings',    label: 'Settings' },
   { to: '/admin/media',       label: 'Media' },
 ];
 
@@ -95,24 +99,22 @@ export default function AdminLayout({ children }) {
             <img className="logo-img" src={logoUrl} alt="Coral Gold Admin" onError={handleLogoError} />
           </NavLink>
           <nav className="admin-header-nav">
-            {NAV.map(n => <NavLink key={n.to} to={n.to}>{n.label}</NavLink>)}
-            <button onClick={() => setPwModal(true)} style={{ background: 'none', border: 'none', color: 'var(--mid)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-              Change Password
-            </button>
-            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--mid)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
-              Logout
-            </button>
+            <a href="/wholesaler/login" target="_blank" rel="noreferrer">Wholesaler Login</a>
+            <NavLink to="/admin/settings">Settings</NavLink>
+            <button onClick={() => setPwModal(true)}>Change Password</button>
+            <button onClick={handleLogout}>Logout</button>
           </nav>
         </div>
       </header>
+      {/* Same main-section nav as the sidebar, just rendered as a horizontally
+          scrollable bar below ~900px instead of a fixed left column — one nav
+          system, two responsive presentations (Batch 19 item 7). */}
       <nav className="admin-mobile-nav">
         {NAV.map(n => (
           <NavLink key={n.to} to={n.to} className={({ isActive }) => isActive ? 'active' : ''}>
             {n.label}
           </NavLink>
         ))}
-        <button onClick={() => setPwModal(true)}>Password</button>
-        <button onClick={handleLogout}>Logout</button>
       </nav>
       <div className="admin-layout">
         <nav className="admin-sidebar">

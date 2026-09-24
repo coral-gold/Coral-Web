@@ -28,7 +28,7 @@ const STRATEGIES = [
 export default function Import() {
   const [step,        setStep]       = useState(STEP.UPLOAD);
   const [xlsxFile,    setXlsxFile]   = useState(null);
-  const [imgFolder,   setImgFolder]  = useState(null);   // FileList from folder picker
+  const [stockImages, setStockImages]= useState(null);   // FileList from multi-file picker
   const [strategy,    setStrategy]   = useState('skip');
   const [preview,     setPreview]    = useState(null);   // { fileId, headers, suggestions, rowCount }
   const [mapping,     setMapping]    = useState({});     // { header: fieldName | '' }
@@ -36,7 +36,7 @@ export default function Import() {
   const [runProgress, setRunProgress]= useState(null);   // { done, total, step }
   const [imgProgress, setImgProgress]= useState(null);   // { done, total, matched, skipped }
   const { show } = useToast();
-  const folderRef = useRef(null);
+  const stockImageRef = useRef(null);
 
   // ── Step 1: upload & preview ──────────────────────────────────────────────
 
@@ -88,10 +88,10 @@ export default function Import() {
     setResult(jobResult);
     show(`Done: ${jobResult.inserted} new, ${jobResult.updated} updated`);
 
-    // If images folder selected and imageMap returned, go to image upload step
-    if (imgFolder && jobResult.imageMap && jobResult.imageMap.length > 0) {
+    // If stock images selected and imageMap returned, go to image upload step
+    if (stockImages && jobResult.imageMap && jobResult.imageMap.length > 0) {
       setStep(STEP.IMAGES);
-      await uploadImages(jobResult.imageMap, imgFolder);
+      await uploadImages(jobResult.imageMap, stockImages);
     } else {
       setStep(STEP.DONE);
     }
@@ -99,12 +99,10 @@ export default function Import() {
 
   // ── Step 4: image upload ──────────────────────────────────────────────────
 
-  async function uploadImages(imageMap, folderFiles) {
+  async function uploadImages(imageMap, files) {
     // Index all files by stem (filename without extension), case-insensitive.
-    // webkitdirectory gives bare f.name for files inside any subfolder depth,
-    // so this naturally covers WTDC/, BG/, ER/, etc. without any folder-name matching.
     const fileIndex = {};
-    for (const f of folderFiles) {
+    for (const f of files) {
       const stem = f.name.toLowerCase().replace(/\.[^.]+$/, '');
       if (stem) fileIndex[stem] = f;
     }
@@ -147,7 +145,7 @@ export default function Import() {
   function reset() {
     setStep(STEP.UPLOAD);
     setXlsxFile(null);
-    setImgFolder(null);
+    setStockImages(null);
     setPreview(null);
     setMapping({});
     setResult(null);
@@ -187,31 +185,28 @@ export default function Import() {
 
             <div className="form-group">
               <label>
-                Image Folder <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(optional — for batch image upload)</span>
+                Stock Image <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(optional — for batch image upload)</span>
               </label>
               <input
-                ref={folderRef}
+                ref={stockImageRef}
                 type="file"
-                // @ts-ignore
-                webkitdirectory="true"
-                directory="true"
+                accept="image/*"
                 multiple
                 style={{ display: 'none' }}
-                onChange={e => setImgFolder(e.target.files)}
+                onChange={e => setStockImages(e.target.files)}
               />
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => folderRef.current?.click()}>
-                  Choose Folder
+                <button type="button" className="btn btn-outline btn-sm" onClick={() => stockImageRef.current?.click()}>
+                  Choose Images
                 </button>
-                {imgFolder
-                  ? <span style={{ fontSize: 13, color: 'var(--mid)' }}>{imgFolder.length} files selected</span>
+                {stockImages
+                  ? <span style={{ fontSize: 13, color: 'var(--mid)' }}>{stockImages.length} image{stockImages.length === 1 ? '' : 's'} selected</span>
                   : <span style={{ fontSize: 13, color: 'var(--mid)' }}>None selected</span>
                 }
               </div>
               <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 6 }}>
-                Select the parent folder that contains your category subfolders (e.g. select "SavedImage" which contains "WTDC/", "BG/", "ER/", etc.).
-                Each image is matched by its filename (without extension) against the product's Design Number / Style Number.
-                Subfolder names and the Category column are not used for matching.
+                Select any number of image files at once. Each image is matched by its filename (without extension)
+                against the product's Design Number / Style Number — the Category column is not used for matching.
               </p>
             </div>
 
@@ -285,9 +280,9 @@ export default function Import() {
               </p>
             )}
 
-            {imgFolder && (
+            {stockImages && (
               <p style={{ fontSize: 13, color: '#27ae60', marginBottom: 12 }}>
-                ✓ {imgFolder.length} files in folder ready for upload. Images will be matched by Design Number (Style Number).
+                ✓ {stockImages.length} stock image{stockImages.length === 1 ? '' : 's'} ready for upload. Images will be matched by Design Number (Style Number).
               </p>
             )}
 

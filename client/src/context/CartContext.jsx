@@ -5,7 +5,6 @@ const CartCtx = createContext(null);
 
 export function CartProvider({ children }) {
   const [cart, setCart] = useState({ ok: true, lines: [], itemCount: 0 });
-  const [panelOpen, setPanelOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -30,7 +29,7 @@ export function CartProvider({ children }) {
   const clear  = ()                      => cartAction({ action: 'clear' });
 
   return (
-    <CartCtx.Provider value={{ cart, refresh, add, remark, remove, clear, panelOpen, setPanelOpen }}>
+    <CartCtx.Provider value={{ cart, refresh, add, remark, remove, clear }}>
       {children}
     </CartCtx.Provider>
   );

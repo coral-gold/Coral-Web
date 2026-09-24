@@ -15,6 +15,7 @@ import Contact       from './pages/public/Contact';
 
 import WholesalerLogin     from './pages/wholesaler/Login';
 import WholesalerCatalogue from './pages/wholesaler/Catalogue';
+import Quotation            from './pages/wholesaler/Quotation';
 import MyQuotations        from './pages/wholesaler/MyQuotations';
 
 import AdminLogin    from './pages/admin/AdminLogin';
@@ -78,6 +79,7 @@ export default function App() {
 
                 <Route path="/wholesaler/login"     element={<WholesalerLogin />} />
                 <Route path="/wholesaler/catalogue" element={<PartyRoute><WholesalerCatalogue /></PartyRoute>} />
+                <Route path="/wholesaler/quotation" element={<PartyRoute><Quotation /></PartyRoute>} />
                 <Route path="/wholesaler/quotations" element={<PartyRoute><MyQuotations /></PartyRoute>} />
 
                 <Route path="/admin"                element={<AdminLogin />} />

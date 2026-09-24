@@ -21,7 +21,7 @@ export default function MyQuotations() {
 
   return (
     <WholesalerLayout>
-      <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, color: 'var(--garnet)', marginBottom: 20 }}>
+      <h1 style={{ fontFamily: "'Poppins', sans-serif", fontSize: 26, color: 'var(--garnet)', marginBottom: 20 }}>
         My Quotations
       </h1>
 

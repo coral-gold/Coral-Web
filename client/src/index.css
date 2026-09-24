@@ -1,5 +1,8 @@
 /* ── Coral Gold – Stylesheet ── */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap');
+/* One consistent font family site-wide (Batch 19 item 5) — Poppins for
+   both headings and body, replacing the earlier Cormorant Garamond/Inter
+   pairing. Hierarchy comes from weight/size, not a second typeface. */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
 :root {
   /* Brand palette (confirmed) */
@@ -35,7 +38,7 @@
 html { scroll-behavior: smooth; }
 html, body { overflow-x: hidden; }
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Poppins', system-ui, sans-serif;
   font-size: 15px;
   color: var(--near-black);
   background: var(--off-white);
@@ -47,6 +50,9 @@ img { max-width: 100%; height: auto; display: block; }
 
 /* ── Layout ── */
 .container { width: 92%; max-width: 1200px; margin: 0 auto; }
+/* Full-width variant for catalog product listings — not capped like a
+   blog-post column on desktop (Batch 19 item 1). */
+.container-wide { width: 96%; max-width: none; margin: 0 auto; }
 
 /* ── Buttons ── */
 .btn {
@@ -118,7 +124,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   color: var(--near-black); text-align: center; padding: 96px 20px 80px;
 }
 .hero h1 {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: 'Poppins', sans-serif;
   font-size: 54px; font-weight: 700; color: var(--primary);
   margin-bottom: 18px; line-height: 1.15;
 }
@@ -131,7 +137,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .section-alt { background: var(--pink-pale); }
 .section-title { text-align: center; margin-bottom: 44px; }
 .section-title h2 {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: 'Poppins', sans-serif;
   font-size: 34px; font-weight: 700; color: var(--primary); margin-bottom: 8px;
 }
 .section-title p { color: var(--mid); font-size: 16px; }
@@ -145,7 +151,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .feature-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
 .feature-icon { font-size: 32px; margin-bottom: 14px; }
 .feature-card h3 {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: 'Poppins', sans-serif;
   color: var(--primary); margin-bottom: 8px; font-size: 19px; font-weight: 700;
 }
 .feature-card p { color: var(--mid); font-size: 14px; line-height: 1.7; }
@@ -168,7 +174,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .pub-card-body p { font-size: 13px; color: var(--mid); line-height: 1.6; }
 
 .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
-.contact-info h3 { font-family: 'Cormorant Garamond', Georgia, serif; color: var(--primary); margin-bottom: 16px; font-size: 22px; font-weight: 700; }
+.contact-info h3 { font-family: 'Poppins', sans-serif; color: var(--primary); margin-bottom: 16px; font-size: 22px; font-weight: 700; }
 .contact-info p { margin-bottom: 12px; color: var(--mid); }
 
 .site-footer {
@@ -191,14 +197,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .section-wholesaler .site-header nav a:hover { color: var(--primary); text-decoration: none; }
 
 .cart-badge {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: var(--secondary); color: #fff;
-  padding: 7px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--secondary); color: #fff !important; text-decoration: none !important;
+  padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 700;
   cursor: pointer; border: none; transition: all .15s; box-shadow: 0 3px 8px rgba(168,71,110,.25);
 }
 .cart-badge:hover { background: var(--primary); transform: translateY(-1px); }
 .cart-badge.has-items { background: var(--primary); box-shadow: 0 3px 8px rgba(109,7,60,.3); }
 .cart-badge.has-items:hover { background: var(--primary-hover); }
+.cart-badge span { background: rgba(255,255,255,.28); border-radius: 999px; min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; padding: 0 4px; }
 
 .login-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .login-box {
@@ -215,7 +222,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .catalogue-filters .filter-btn {
   padding: 7px 18px; border: 1.5px solid var(--border); border-radius: 999px;
   background: var(--surface); cursor: pointer; font-family: inherit; font-size: 13px;
-  font-weight: 500; transition: all .15s; color: var(--near-black);
+  font-weight: 500; transition: all .15s; color: var(--near-black); flex-shrink: 0;
 }
 .catalogue-filters .filter-btn:hover { border-color: var(--secondary); color: var(--secondary); }
 .catalogue-filters .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
@@ -237,6 +244,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .grid-cols-btn:hover { color: var(--primary); }
 .grid-cols-btn.active { background: var(--primary); color: #fff; }
 
+.weight-range-filter {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;
+}
+.weight-range-filter .form-control-sm { width: 90px; flex-shrink: 0; }
+.weight-range-sep { color: var(--mid); font-size: 13px; }
+.btn-link-clear {
+  background: none; border: none; color: var(--secondary); font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: inherit; text-decoration: underline; padding: 0;
+}
 .catalogue-tag-filters { margin-top: -10px; }
 .catalogue-filters-label { font-size: 12px; color: var(--mid); font-weight: 600; align-self: center; margin-right: 2px; }
 .filter-btn-tag { font-size: 12px; padding: 5px 14px; }
@@ -269,23 +285,20 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .product-card.in-cart { border-color: var(--secondary); }
 .product-card.in-cart .btn-add-cart { background: var(--secondary-light); border-color: var(--secondary-light); color: var(--primary); box-shadow: none; }
 
-/* Quotation panel */
-.quot-panel {
-  position: fixed; top: 0; right: -440px; width: 440px; height: 100vh;
-  background: var(--surface); box-shadow: -6px 0 32px rgba(0,0,0,.18);
-  z-index: 1000; display: flex; flex-direction: column;
-  transition: right .3s ease;
+/* Quotation build screen (Batch 19 item 6 — replaces the old slide-out
+   panel; .panel-item/.panel-summary/etc. below are shared with it). */
+.quotation-build-list {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 4px 18px; margin-bottom: 24px;
 }
-.quot-panel.open { right: 0; }
-.quot-panel .panel-header {
-  background: var(--primary); color: #fff; padding: 18px 20px;
-  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+.quotation-build-footer {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 22px; max-width: 480px;
 }
-.quot-panel .panel-header h3 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 18px; font-weight: 700; }
-.panel-close { background: none; border: none; color: rgba(255,255,255,.8); font-size: 22px; cursor: pointer; padding: 2px 6px; }
-.panel-close:hover { color: #fff; }
-.quot-panel .panel-body { flex: 1; overflow-y: auto; padding: 16px; }
-.quot-panel .panel-footer { padding: 16px; border-top: 1px solid var(--border); flex-shrink: 0; background: var(--pink-pale); }
+.quotation-empty { text-align: center; padding: 70px 20px; color: var(--mid); }
+.quotation-empty-icon { font-size: 48px; margin-bottom: 14px; }
+.quotation-empty p { margin-bottom: 20px; font-size: 15px; }
+
 .panel-summary { font-size: 14px; color: var(--mid); margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 
 .panel-item { display: flex; align-items: flex-start; gap: 10px; border-bottom: 1px solid var(--border); padding: 12px 0; }
@@ -301,18 +314,39 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .panel-item-remark:focus { outline: none; border-color: var(--secondary); }
 .panel-remove { background: none; border: none; color: #B3261E; cursor: pointer; font-size: 16px; padding: 4px; opacity: .6; transition: opacity .15s; }
 .panel-remove:hover { opacity: 1; }
-.panel-empty { text-align: center; color: var(--mid); padding: 48px 20px; font-size: 14px; }
 
-.panel-overlay {
-  position: fixed; inset: 0; background: rgba(15,15,15,.4); z-index: 999;
-  backdrop-filter: blur(2px);
-}
 .quot-notes {
   width: 100%; padding: 9px 11px; border: 1.5px solid var(--border); border-radius: var(--radius);
-  font-family: inherit; font-size: 13px; margin-bottom: 12px; resize: vertical; height: 60px;
+  font-family: inherit; font-size: 13px; margin-bottom: 16px; resize: vertical; height: 60px;
   background: var(--surface);
 }
 .quot-notes:focus { outline: none; border-color: var(--secondary); }
+
+/* Prominent, unmistakably-primary CTA (item 2) */
+.btn-generate-quotation {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 14px 24px; font-size: 15px; font-weight: 700; font-family: inherit;
+  background: var(--primary); color: #fff; border: none; border-radius: 999px;
+  cursor: pointer; box-shadow: 0 4px 14px rgba(109,7,60,.3); transition: all .15s;
+}
+.btn-generate-quotation:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 6px 18px rgba(109,7,60,.38); }
+.btn-generate-quotation:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+/* Sticky bar, always visible while browsing the catalogue (item 6) */
+.sticky-quotation-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 500;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  background: var(--primary); color: #fff !important; text-decoration: none !important;
+  padding: 16px 24px; font-size: 15px; font-weight: 700; font-family: inherit;
+  box-shadow: 0 -4px 20px rgba(109,7,60,.25); transition: background .15s;
+}
+.sticky-quotation-bar:hover { background: var(--primary-hover); }
+.sticky-quotation-icon { font-size: 18px; }
+.sticky-quotation-count {
+  background: #fff; color: var(--primary); border-radius: 999px;
+  min-width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; padding: 0 6px;
+}
 
 /* ═══════════════ ADMIN ═══════════════ */
 .section-admin { background: var(--off-white); }
@@ -321,12 +355,21 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   background: #FFFFFF; position: sticky; top: 0; z-index: 100;
   box-shadow: 0 1px 0 var(--border);
 }
-.admin-header .container { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+.admin-header .container { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 12px; }
 .admin-header .logo-img { height: 28px; width: auto; display: block; }
 .admin-header nav { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
 .admin-header nav a { color: var(--near-black); font-size: 13px; font-weight: 500; }
 .admin-header nav a:hover { color: var(--primary); text-decoration: none; }
 .admin-header nav a.active { color: var(--primary); font-weight: 700; }
+/* Minimal top bar: Wholesaler Login / Settings / Change Password / Logout —
+   the only items that live outside the sidebar (Batch 19 item 7). Buttons
+   need explicit styling now that they no longer carry per-element inline
+   styles, to look identical to the plain links beside them. */
+.admin-header-nav button {
+  background: none; border: none; color: var(--near-black); font-size: 13px;
+  font-weight: 500; font-family: inherit; cursor: pointer; padding: 0;
+}
+.admin-header-nav button:hover { color: var(--primary); }
 
 .admin-login-wrap { min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .admin-login-box {
@@ -335,12 +378,17 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 .admin-login-box .logo-img { height: 40px; width: auto; display: block; margin: 0 auto 20px; }
 .admin-login-box h1 {
-  text-align: center; font-family: 'Cormorant Garamond', Georgia, serif;
+  text-align: center; font-family: 'Poppins', sans-serif;
   font-size: 22px; margin-bottom: 24px; color: var(--primary); font-weight: 700;
 }
 
 .admin-layout { display: grid; grid-template-columns: 208px 1fr; min-height: calc(100vh - 60px); }
-.admin-sidebar { background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; }
+/* Sticky, not just a tall column — stays in view while .admin-main scrolls
+   past it, rather than scrolling away with the rest of the page (item 7). */
+.admin-sidebar {
+  background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0;
+  position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; align-self: start;
+}
 .admin-sidebar .nav-item {
   display: block; padding: 10px 20px; color: #6B5560; font-size: 13px; font-weight: 500;
   border-left: 3px solid transparent; transition: all .15s;
@@ -354,14 +402,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
    track (and the whole page) past the viewport instead of scrolling inside
    .table-wrap as intended — the classic CSS Grid overflow trap. */
 .admin-main { padding: 28px 32px; min-width: 0; }
-.admin-main h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 22px; }
+.admin-main h1 { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 22px; }
 
 .admin-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   box-shadow: var(--shadow); padding: 22px 24px; margin-bottom: 22px;
 }
 .admin-card h3 { font-size: 13px; color: var(--mid); font-weight: 600; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .4px; }
-.admin-card .big-num { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 42px; font-weight: 700; color: var(--primary); line-height: 1; }
+.admin-card .big-num { font-family: 'Poppins', sans-serif; font-size: 42px; font-weight: 700; color: var(--primary); line-height: 1; }
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 16px; margin-bottom: 24px; }
 .stat-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
@@ -408,35 +456,48 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* ── Wholesaler main ── */
 .wholesaler-main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
+/* Catalog pages use the full screen width on desktop instead of being
+   capped like a blog-post column (item 1) — everything else (My
+   Quotations' data table, the Quotation screen) keeps the narrower,
+   more readable default. */
+.wholesaler-main-wide { max-width: none; }
 
 /* ── Admin mobile nav ── */
+/* The sidebar's main-section links, rendered as a horizontally-scrollable
+   bar instead of a fixed column below ~900px — same nav, not a second one.
+   Sticky right under the header so it (and the header) stay in view while
+   only .admin-main scrolls underneath (item 7). */
 .admin-mobile-nav {
   display: none;
+  position: sticky; top: 52px; z-index: 99;
   overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch;
   background: #FFFFFF; border-bottom: 1px solid var(--border);
   padding: 0 12px; scrollbar-width: none;
 }
 .admin-mobile-nav::-webkit-scrollbar { display: none; }
-.admin-mobile-nav a, .admin-mobile-nav button {
+.admin-mobile-nav a {
   display: inline-block; padding: 10px 14px; color: var(--near-black); font-size: 13px;
   font-weight: 500; white-space: nowrap; border-bottom: 2px solid transparent;
   transition: color .15s, border-color .15s; text-decoration: none;
-  background: none; border-top: none; border-left: none; border-right: none;
-  cursor: pointer; font-family: inherit;
 }
-.admin-mobile-nav a:hover, .admin-mobile-nav button:hover { color: var(--primary); }
+.admin-mobile-nav a:hover { color: var(--primary); }
 .admin-mobile-nav a.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 700; }
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .admin-layout { grid-template-columns: 1fr; }
   .admin-sidebar { display: none; }
-  /* .admin-header nav (base rule, specificity 0,1,1) would otherwise beat a
-     plain .admin-header-nav here (0,1,0) and stay display:flex on mobile —
-     match its specificity so this actually hides it. */
-  .admin-header .admin-header-nav { display: none; }
   .admin-mobile-nav { display: block; }
   .admin-header .container { height: 52px; }
+  /* Scroll sideways instead of wrapping to a second line — keeps the header
+     a predictable, fixed height so .admin-mobile-nav's sticky offset below
+     it never has to guess at a taller wrapped header (item 7/8). */
+  .admin-header nav {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; max-width: 60vw;
+  }
+  .admin-header nav::-webkit-scrollbar { display: none; }
+  .admin-header nav a, .admin-header-nav button { white-space: nowrap; }
   .contact-grid { grid-template-columns: 1fr; }
 }
 
@@ -455,6 +516,18 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
   /* Admin main */
   .admin-main { padding: 16px; }
+
+  /* Catalog filters (category + tag rows) scroll sideways instead of
+     wrapping — swipeable on a phone, never overflows the screen width
+     (item 1/8). Scrolls within the page's existing side padding rather
+     than bleeding to the true screen edge, since that padding itself
+     varies across breakpoints (16px here, 12px below 600px) and a
+     hardcoded bleed would either under- or over-shoot it. */
+  .catalogue-filters {
+    flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 4px;
+  }
+  .catalogue-filters::-webkit-scrollbar { display: none; }
 
   /* Wholesaler main */
   .wholesaler-main { padding: 16px; }
@@ -567,7 +640,9 @@ select.form-control:disabled, select.form-control-sm:disabled {
 
 /* Toast */
 .toast {
-  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  /* Clears the sticky quotation bar's ~56px height on the catalogue page —
+     a bit higher than strictly needed elsewhere, but never collides. */
+  position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
   padding: 11px 24px; border-radius: 999px; font-size: 14px; z-index: 9999;
   color: #fff; pointer-events: none; transition: opacity .3s; box-shadow: var(--shadow-md);
 }
@@ -575,8 +650,8 @@ select.form-control:disabled, select.form-control-sm:disabled {
 .toast-error   { background: #B3261E; }
 
 /* Admin page utilities */
-.admin-page-title { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 20px; }
-.stat-value { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 40px; font-weight: 700; color: var(--primary); line-height: 1; }
+.admin-page-title { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 20px; }
+.stat-value { font-family: 'Poppins', sans-serif; font-size: 40px; font-weight: 700; color: var(--primary); line-height: 1; }
 .stat-label { font-size: 12px; color: var(--mid); text-transform: uppercase; letter-spacing: .5px; margin-top: 6px; }
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 520px) { .form-row-2 { grid-template-columns: 1fr; } }
@@ -592,7 +667,7 @@ select.form-control:disabled, select.form-control-sm:disabled {
   width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto;
   box-shadow: var(--shadow-lg);
 }
-.modal-box h2 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 20px; }
+.modal-box h2 { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 20px; }
 
 /* Global loading bar — shown whenever any api.* request is in flight */
 .global-loading-bar {
