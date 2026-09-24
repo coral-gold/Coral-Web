@@ -6,7 +6,9 @@ export default function PublicLayout({ children }) {
     <div className="section-public">
       <header className="site-header">
         <div className="container">
-          <Link className="logo" to="/">✦ Coral Gold</Link>
+          <Link className="logo" to="/">
+            <img className="logo-img" src="/logo.png" alt="Coral Gold" />
+          </Link>
           <nav>
             <NavLink to="/" end>Home</NavLink>
             <NavLink to="/about">About</NavLink>

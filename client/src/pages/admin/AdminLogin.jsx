@@ -26,11 +26,11 @@ export default function AdminLogin() {
   }
 
   return (
-    <div className="section-wholesaler" style={{ minHeight: '100vh', background: 'var(--dark)' }}>
-      <div className="login-wrap">
-        <div className="login-box">
-          <div className="logo">✦ Coral Gold</div>
-          <h2>Admin Panel</h2>
+    <div className="section-wholesaler" style={{ minHeight: '100vh', background: 'linear-gradient(160deg, var(--pink-pale) 0%, var(--off-white) 60%)' }}>
+      <div className="admin-login-wrap">
+        <div className="admin-login-box">
+          <img className="logo-img" src="/logo.png" alt="Coral Gold" />
+          <h1>Admin Panel</h1>
           {error && (
             <div className="alert alert-error">
               {error}

@@ -28,7 +28,9 @@ export default function WholesalerLayout({ children }) {
     <div className="section-wholesaler">
       <header className="site-header">
         <div className="container">
-          <span className="logo">✦ Coral Gold</span>
+          <Link className="logo" to="/wholesaler/catalogue">
+            <img className="logo-img" src="/logo.png" alt="Coral Gold" />
+          </Link>
           <nav>
             <Link to="/wholesaler/catalogue">Catalogue</Link>
             <Link to="/wholesaler/quotations">My Quotations</Link>
@@ -38,7 +40,7 @@ export default function WholesalerLayout({ children }) {
             >
               🛒 <span>{cart.itemCount}</span> items
             </button>
-            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#c8b8a8', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
+            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--mid)', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
               Logout
             </button>
           </nav>

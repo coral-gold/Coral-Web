@@ -26,10 +26,10 @@ export default function WholesalerLogin() {
   }
 
   return (
-    <div className="section-wholesaler" style={{ minHeight: '100vh', background: 'var(--dark)' }}>
+    <div className="section-wholesaler" style={{ minHeight: '100vh', background: 'linear-gradient(160deg, var(--pink-pale) 0%, var(--off-white) 60%)' }}>
       <div className="login-wrap">
         <div className="login-box">
-          <div className="logo">✦ Coral Gold</div>
+          <img className="logo-img" src="/logo.png" alt="Coral Gold" style={{ height: 46, margin: '0 auto 6px' }} />
           <h2>Wholesaler Portal</h2>
           {error && (
             <div className="alert alert-error">

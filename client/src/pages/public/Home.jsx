@@ -30,7 +30,7 @@ export default function Home() {
           <p>{heroSubtitle}</p>
           <div className="hero-buttons">
             <Link to="/catalog" className="btn btn-gold">Browse Catalogue</Link>
-            <Link to="/wholesaler/login" className="btn btn-outline" style={{ color: '#d4c9be', borderColor: '#d4c9be' }}>
+            <Link to="/wholesaler/login" className="btn btn-outline">
               Wholesaler Login
             </Link>
           </div>

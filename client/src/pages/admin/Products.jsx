@@ -333,7 +333,7 @@ export default function Products() {
 
                 {/* Quick Edit inline row */}
                 {qeId === p.id && (
-                  <tr style={{ background: '#fffbe6' }}>
+                  <tr style={{ background: 'var(--cream)' }}>
                     <td colSpan={8} style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         <div className="form-group" style={{ margin: 0, minWidth: 130 }}>

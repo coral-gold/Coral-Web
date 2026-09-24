@@ -32,10 +32,12 @@ export default function AdminLayout({ children }) {
     <div className="section-admin">
       <header className="admin-header">
         <div className="container">
-          <NavLink className="logo" to="/admin/dashboard">⚙ Coral Gold Admin</NavLink>
+          <NavLink className="logo" to="/admin/dashboard">
+            <img className="logo-img" src="/logo.png" alt="Coral Gold Admin" />
+          </NavLink>
           <nav className="admin-header-nav">
             {NAV.map(n => <NavLink key={n.to} to={n.to}>{n.label}</NavLink>)}
-            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#c8b8a8', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+            <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--mid)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
               Logout
             </button>
           </nav>
