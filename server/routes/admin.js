@@ -170,6 +170,47 @@ router.delete('/products/:id', async (req, res) => {
     res.json({ ok: true });
 });
 
+// ── Bulk product actions ───────────────────────────────────────────────────────
+
+router.post('/products/bulk', async (req, res) => {
+    const { action, ids, category_id } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.json({ ok: false, error: 'No products selected.' });
+    const safeIds = ids.map(Number).filter(n => Number.isInteger(n) && n > 0);
+    if (!safeIds.length) return res.json({ ok: false, error: 'Invalid IDs.' });
+    const ph = safeIds.map(() => '?').join(',');
+
+    try {
+        if (action === 'delete') {
+            await db.query(`DELETE FROM products WHERE id IN (${ph})`, safeIds);
+            return res.json({ ok: true, affected: safeIds.length });
+        }
+        if (action === 'change_category') {
+            const catId = Number(category_id);
+            if (!catId) return res.json({ ok: false, error: 'category_id required.' });
+            await db.query(`UPDATE products SET category_id = ? WHERE id IN (${ph})`, [catId, ...safeIds]);
+            return res.json({ ok: true, affected: safeIds.length });
+        }
+        if (action === 'delete_image') {
+            const [rows] = await db.query(
+                `SELECT id, image_path FROM products WHERE id IN (${ph}) AND image_path IS NOT NULL AND image_path != ''`,
+                safeIds
+            );
+            for (const row of rows) {
+                try {
+                    const imgPath = path.join(UPLOAD_DIR, path.basename(row.image_path));
+                    if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+                } catch (_) {}
+            }
+            await db.query(`UPDATE products SET image_path = NULL WHERE id IN (${ph})`, safeIds);
+            return res.json({ ok: true, affected: safeIds.length });
+        }
+        return res.json({ ok: false, error: 'Unknown action.' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
 // ── Excel Import (two-step: preview → run) ────────────────────────────────────
 
 // Known aliases for auto-suggesting column mappings
@@ -268,22 +309,23 @@ router.delete('/media/:filename', (req, res) => {
 });
 
 // Step 2: Run import using admin-supplied column mapping
-// Body: { fileId, mapping: { "Column Name": "field_name" | null, ... } }
+// Body: { fileId, mapping, strategy: 'skip'|'fill'|'merge'|'replace' }
 router.post('/import/run', async (req, res) => {
-    const { fileId, mapping } = req.body || {};
+    const { fileId, mapping, strategy } = req.body || {};
     if (!fileId || !mapping) return res.json({ ok: false, error: 'fileId and mapping required.' });
+
+    const STRATEGIES = ['skip', 'fill', 'merge', 'replace'];
+    const strat = STRATEGIES.includes(strategy) ? strategy : 'skip';
 
     const temp = importTemp.get(fileId);
     if (!temp) return res.json({ ok: false, error: 'File session expired (30 min). Please re-upload.' });
 
-    // Build header → col index map from the actual file
     const wb   = XLSX.read(temp.buffer, { type: 'buffer' });
     const ws   = wb.Sheets[wb.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     if (data.length < 2) return res.json({ ok: true, inserted: 0, updated: 0, skipped: 0, errors: [], imageMap: [] });
 
     const rawHeaders = data[0].map(h => String(h).trim());
-    // col[fieldName] = column index
     const col = {};
     for (const [header, field] of Object.entries(mapping)) {
         if (!field) continue;
@@ -296,33 +338,41 @@ router.post('/import/run', async (req, res) => {
     }
 
     let inserted = 0, updated = 0, skipped = 0;
-    const errors   = [];
-    const imageMap = []; // [{jewel_code, filename}] — returned so client can upload images
-    const catCache = {};
+    const errors      = [];
+    const imageMap    = [];
+    const catCache    = {};
+    const seenInFile  = new Set(); // deduplicate by design_number within the file
 
     for (let r = 1; r < data.length; r++) {
-        const row      = data[r];
+        const row       = data[r];
         const jewelCode = String(row[col.jewel_code] ?? '').trim();
         if (!jewelCode) { skipped++; continue; }
 
-        const designNo  = col.design_number !== undefined ? String(row[col.design_number] ?? '').trim() : jewelCode;
-        const catName   = col.category      !== undefined ? String(row[col.category]      ?? '').trim() : '';
-        const grossWt   = col.gross_weight  !== undefined ? parseFloat(row[col.gross_weight])  || null  : null;
-        const netWt     = col.net_weight    !== undefined ? parseFloat(row[col.net_weight])    || null  : null;
-        const qty       = col.quantity      !== undefined ? parseInt(row[col.quantity])        || 0     : 0;
-        const descr     = col.description   !== undefined ? String(row[col.description]   ?? '').trim() || null : null;
+        const designNo     = col.design_number !== undefined ? String(row[col.design_number] ?? '').trim() : '';
+        const finalDesign  = designNo || jewelCode;
+        const styleKey     = finalDesign.toLowerCase();
+        const catName      = col.category     !== undefined ? String(row[col.category]     ?? '').trim() : '';
+        const grossWt      = col.gross_weight !== undefined ? parseFloat(row[col.gross_weight]) || null  : null;
+        const netWt        = col.net_weight   !== undefined ? parseFloat(row[col.net_weight])   || null  : null;
+        const descr        = col.description  !== undefined ? String(row[col.description]  ?? '').trim() || null : null;
 
-        // Always include in imageMap so client can match against selected folder
-        // If an image_path column was mapped, also include the extracted filename as a hint
-        const imgEntry = { jewel_code: jewelCode, design_number: designNo || jewelCode };
-        if (col.image_path !== undefined) {
-            const rawPath = String(row[col.image_path] ?? '').trim();
-            const filename = extractImageFilename(rawPath);
-            if (filename) imgEntry.filename = filename;
+        // Add to imageMap once per design_number (first occurrence only)
+        if (!seenInFile.has(styleKey)) {
+            const imgEntry = { jewel_code: jewelCode, design_number: finalDesign };
+            if (col.image_path !== undefined) {
+                const rawPath = String(row[col.image_path] ?? '').trim();
+                const fn = extractImageFilename(rawPath);
+                if (fn) imgEntry.filename = fn;
+            }
+            imageMap.push(imgEntry);
         }
-        imageMap.push(imgEntry);
+
+        // Only process the first occurrence of each design_number per file
+        if (seenInFile.has(styleKey)) { skipped++; continue; }
+        seenInFile.add(styleKey);
 
         try {
+            // Resolve category
             let catId = catName ? catCache[catName] : null;
             if (!catId && catName) {
                 await db.query('INSERT IGNORE INTO categories (name) VALUES (?)', [catName]);
@@ -330,31 +380,69 @@ router.post('/import/run', async (req, res) => {
                 catId = cat?.id || null;
                 catCache[catName] = catId;
             }
-            if (!catId && !catName) {
-                const [[def]] = await db.query('SELECT id FROM categories ORDER BY id LIMIT 1');
-                catId = def?.id;
-                if (!catId) {
-                    await db.query('INSERT IGNORE INTO categories (name) VALUES (?)', ['General']);
-                    const [[cat]] = await db.query("SELECT id FROM categories WHERE name='General'");
-                    catId = cat.id;
+            if (!catId) {
+                if (!catCache['']) {
+                    const [[def]] = await db.query('SELECT id FROM categories ORDER BY id LIMIT 1');
+                    if (def) {
+                        catCache[''] = def.id;
+                    } else {
+                        await db.query("INSERT IGNORE INTO categories (name) VALUES ('General')");
+                        const [[cat]] = await db.query("SELECT id FROM categories WHERE name='General'");
+                        catCache[''] = cat.id;
+                    }
                 }
-                catCache[''] = catId;
+                catId = catCache[''];
             }
 
-            const [r2] = await db.query(
-                `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, quantity, description)
-                 VALUES (?,?,?,?,?,?,?)
-                 ON DUPLICATE KEY UPDATE
-                   category_id   = VALUES(category_id),
-                   design_number = VALUES(design_number),
-                   gross_weight  = VALUES(gross_weight),
-                   net_weight    = VALUES(net_weight),
-                   quantity      = VALUES(quantity),
-                   description   = VALUES(description)`,
-                [catId, designNo || jewelCode, jewelCode, grossWt, netWt, qty, descr]
+            // Check for existing product by design_number (the unique identity key)
+            const [[existing]] = await db.query(
+                'SELECT id, jewel_code, category_id, gross_weight, net_weight, description FROM products WHERE design_number = ?',
+                [finalDesign]
             );
-            if (r2.affectedRows >= 2) updated++;
-            else inserted++;
+
+            if (!existing) {
+                await db.query(
+                    `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, description)
+                     VALUES (?,?,?,?,?,?)`,
+                    [catId, finalDesign, jewelCode, grossWt, netWt, descr]
+                );
+                inserted++;
+            } else if (strat === 'skip') {
+                skipped++;
+            } else if (strat === 'fill') {
+                // Only fill fields that are currently blank
+                const sets = [], vals = [];
+                if (!existing.jewel_code   && jewelCode) { sets.push('jewel_code = ?');   vals.push(jewelCode); }
+                if (!existing.category_id  && catId)     { sets.push('category_id = ?');  vals.push(catId); }
+                if (!existing.gross_weight && grossWt)   { sets.push('gross_weight = ?'); vals.push(grossWt); }
+                if (!existing.net_weight   && netWt)     { sets.push('net_weight = ?');   vals.push(netWt); }
+                if (!existing.description  && descr)     { sets.push('description = ?');  vals.push(descr); }
+                if (sets.length) {
+                    await db.query(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`, [...vals, existing.id]);
+                    updated++;
+                } else { skipped++; }
+            } else if (strat === 'merge') {
+                // New value wins if non-empty, else keep existing
+                await db.query(
+                    `UPDATE products SET
+                       jewel_code   = COALESCE(NULLIF(?, ''), jewel_code),
+                       category_id  = COALESCE(?, category_id),
+                       gross_weight = COALESCE(?, gross_weight),
+                       net_weight   = COALESCE(?, net_weight),
+                       description  = COALESCE(NULLIF(?, ''), description)
+                     WHERE id = ?`,
+                    [jewelCode, catId || null, grossWt, netWt, descr, existing.id]
+                );
+                updated++;
+            } else if (strat === 'replace') {
+                await db.query('DELETE FROM products WHERE id = ?', [existing.id]);
+                await db.query(
+                    `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, description)
+                     VALUES (?,?,?,?,?,?)`,
+                    [catId, finalDesign, jewelCode, grossWt, netWt, descr]
+                );
+                updated++;
+            }
         } catch (e) {
             errors.push(`Row ${r + 1} (${jewelCode}): ${e.message}`);
             skipped++;
@@ -380,11 +468,15 @@ function extractImageFilename(pathValue) {
 
 // Step 3 (optional): Upload individual product image matched from local folder
 router.post('/import/images', imageUpload.single('image'), async (req, res) => {
-    const { jewel_code } = req.body;
-    if (!jewel_code || !req.file) return res.json({ ok: false, error: 'jewel_code and image required.' });
+    const { design_number } = req.body;
+    if (!design_number || !req.file) return res.json({ ok: false, error: 'design_number and image required.' });
     try {
         const filename = await saveImage(req.file);
-        await db.query('UPDATE products SET image_path = ? WHERE jewel_code = ?', [filename, jewel_code]);
+        // Only attach image if the product currently has no image (strategy-independent rule)
+        await db.query(
+            `UPDATE products SET image_path = ? WHERE design_number = ? AND (image_path IS NULL OR image_path = '')`,
+            [filename, design_number]
+        );
         res.json({ ok: true, filename });
     } catch (e) {
         console.error(e);
@@ -398,6 +490,7 @@ const PARTY_SORT_COLS = {
     party_id:     'party_id',
     company_name: 'company_name',
     phone:        'phone',
+    is_active:    'is_active',
     created_at:   'created_at',
 };
 

@@ -17,10 +17,18 @@ const PRODUCT_FIELDS = [
 
 const STEP = { UPLOAD: 0, MAP: 1, RUNNING: 2, DONE: 3, IMAGES: 4 };
 
+const STRATEGIES = [
+  { value: 'skip',    label: 'Skip Same (default)',        desc: 'If Style Number already exists, leave it unchanged.' },
+  { value: 'fill',    label: 'Style By Default',           desc: 'Keep existing data; only fill in currently-blank fields.' },
+  { value: 'merge',   label: 'Merge Style',                desc: 'New values overwrite existing where both are set.' },
+  { value: 'replace', label: 'Add New Style, Old Delete',  desc: 'Delete existing record and create a fresh one from this row.' },
+];
+
 export default function Import() {
   const [step,        setStep]       = useState(STEP.UPLOAD);
   const [xlsxFile,    setXlsxFile]   = useState(null);
   const [imgFolder,   setImgFolder]  = useState(null);   // FileList from folder picker
+  const [strategy,    setStrategy]   = useState('skip');
   const [preview,     setPreview]    = useState(null);   // { fileId, headers, suggestions, rowCount }
   const [mapping,     setMapping]    = useState({});     // { header: fieldName | '' }
   const [result,      setResult]     = useState(null);
@@ -58,7 +66,7 @@ export default function Import() {
     if (!jewel) { show('You must map a column to "Jewel Code" before importing.', 'error'); return; }
     setStep(STEP.RUNNING);
 
-    const d = await api.post('/admin/import/run', { fileId: preview.fileId, mapping });
+    const d = await api.post('/admin/import/run', { fileId: preview.fileId, mapping, strategy });
     if (!d.ok) { show(d.error || 'Import failed', 'error'); setStep(STEP.MAP); return; }
 
     setResult(d);
@@ -85,10 +93,18 @@ export default function Import() {
       if (stem) fileIndex[stem] = f;
     }
 
-    let done = 0, matched = 0, skipped = 0;
-    setImgProgress({ done: 0, total: imageMap.length, matched: 0, skipped: 0 });
+    // Deduplicate imageMap by design_number (server already does this, but guard client-side too)
+    const seen = new Set();
+    const dedupedMap = [];
+    for (const entry of imageMap) {
+      const key = (entry.design_number || entry.jewel_code).toLowerCase().trim();
+      if (!seen.has(key)) { seen.add(key); dedupedMap.push(entry); }
+    }
 
-    for (const { jewel_code, design_number } of imageMap) {
+    let done = 0, matched = 0, skipped = 0;
+    setImgProgress({ done: 0, total: dedupedMap.length, matched: 0, skipped: 0 });
+
+    for (const { design_number, jewel_code } of dedupedMap) {
       // Match solely by Design Number (Style Number) = image filename stem.
       // Category column and subfolder name are irrelevant — never compared.
       const dn = (design_number || jewel_code).toLowerCase().trim();
@@ -96,7 +112,7 @@ export default function Import() {
 
       if (file) {
         const fd = new FormData();
-        fd.append('jewel_code', jewel_code);
+        fd.append('design_number', design_number || jewel_code);
         fd.append('image', file);
         const r = await api.form('/admin/import/images', fd);
         if (r.ok) matched++;
@@ -105,7 +121,7 @@ export default function Import() {
         skipped++;
       }
       done++;
-      setImgProgress({ done, total: imageMap.length, matched, skipped });
+      setImgProgress({ done, total: dedupedMap.length, matched, skipped });
     }
     setStep(STEP.DONE);
   }
@@ -180,6 +196,24 @@ export default function Import() {
                 Select the parent folder that contains your category subfolders (e.g. select "SavedImage" which contains "WTDC/", "BG/", "ER/", etc.).
                 Each image is matched by its filename (without extension) against the product's Design Number / Style Number.
                 Subfolder names and the Category column are not used for matching.
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label>Duplicate Style Number strategy</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+                {STRATEGIES.map(s => (
+                  <label key={s.value} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer', padding: '6px 10px', borderRadius: 6, border: `1px solid ${strategy === s.value ? 'var(--garnet)' : 'rgba(0,0,0,0.1)'}`, background: strategy === s.value ? 'rgba(139,0,0,0.04)' : 'transparent' }}>
+                    <input type="radio" name="strategy" value={s.value} checked={strategy === s.value} onChange={() => setStrategy(s.value)} style={{ marginTop: 2, flexShrink: 0 }} />
+                    <span>
+                      <strong style={{ fontSize: 13 }}>{s.label}</strong>
+                      <span style={{ display: 'block', fontSize: 12, color: 'var(--mid)' }}>{s.desc}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 8 }}>
+                Images are always attached if the product currently has no image, regardless of strategy.
               </p>
             </div>
 

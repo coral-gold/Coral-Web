@@ -18,19 +18,30 @@ function Th({ col, sort, onSort, children }) {
 }
 
 export default function Products() {
-  const [products,   setProducts]   = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [page,       setPage]       = useState(1);
-  const [hasMore,    setHasMore]    = useState(false);
-  const [search,     setSearch]     = useState('');
-  const [sort,       setSort]       = useState({ col: 'design_number', dir: 'asc' });
-  const [modal,      setModal]      = useState(false);
-  const [form,       setForm]       = useState(EMPTY);
-  const [editId,     setEditId]     = useState(null);
-  const [imageFile,  setImageFile]  = useState(null);
-  const [saving,     setSaving]     = useState(false);
+  const [products,      setProducts]      = useState([]);
+  const [categories,    setCategories]    = useState([]);
+  const [page,          setPage]          = useState(1);
+  const [hasMore,       setHasMore]       = useState(false);
+  const [search,        setSearch]        = useState('');
+  const [sort,          setSort]          = useState({ col: 'design_number', dir: 'asc' });
+  const [modal,         setModal]         = useState(false);
+  const [form,          setForm]          = useState(EMPTY);
+  const [editId,        setEditId]        = useState(null);
+  const [imageFile,     setImageFile]     = useState(null);
+  const [saving,        setSaving]        = useState(false);
+  // Bulk
+  const [selected,      setSelected]      = useState(new Set());
+  const [bulkAction,    setBulkAction]    = useState('');
+  const [bulkCatId,     setBulkCatId]     = useState('');
+  const [bulkSaving,    setBulkSaving]    = useState(false);
+  // Quick edit
+  const [qeId,          setQeId]          = useState(null);
+  const [qeForm,        setQeForm]        = useState({});
+  const [qeSaving,      setQeSaving]      = useState(false);
   const { show } = useToast();
   const debounce = useRef(null);
+
+  // ── Data loading ──────────────────────────────────────────────────────────
 
   async function load(reset = false, sortOpts) {
     const p = reset ? 1 : page;
@@ -59,6 +70,8 @@ export default function Products() {
     clearTimeout(debounce.current);
     debounce.current = setTimeout(() => { setPage(1); load(true); }, 350);
   }, [search]);
+
+  // ── Full edit modal ───────────────────────────────────────────────────────
 
   function openAdd() { setForm(EMPTY); setEditId(null); setImageFile(null); setModal(true); }
   function openEdit(p) {
@@ -96,10 +109,83 @@ export default function Products() {
 
   const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
+  // ── Quick edit ────────────────────────────────────────────────────────────
+
+  function openQe(p) {
+    setQeId(p.id);
+    setQeForm({
+      design_number: p.design_number || '',
+      jewel_code:    p.jewel_code    || '',
+      category_id:   String(p.category_id || ''),
+      gross_weight:  p.gross_weight  || '',
+      net_weight:    p.net_weight    || '',
+    });
+  }
+
+  async function saveQe(id) {
+    setQeSaving(true);
+    const fd = new FormData();
+    Object.entries(qeForm).forEach(([k, v]) => fd.append(k, v ?? ''));
+    const d = await api.formPut(`/admin/products/${id}`, fd);
+    setQeSaving(false);
+    if (d.ok) { setQeId(null); setPage(1); load(true); show('Saved'); }
+    else show(d.error || 'Failed', 'error');
+  }
+
+  const setQeF = k => e => setQeForm(f => ({ ...f, [k]: e.target.value }));
+
+  // ── Selection & bulk ──────────────────────────────────────────────────────
+
+  function toggleAll() {
+    if (selected.size === products.length && products.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(products.map(p => p.id)));
+    }
+  }
+
+  function toggleOne(id) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function applyBulk() {
+    if (!bulkAction) return show('Select an action.', 'error');
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (bulkAction === 'delete') {
+      if (!confirm(`Permanently delete ${ids.length} product(s)?`)) return;
+    }
+    if (bulkAction === 'change_category' && !bulkCatId) {
+      return show('Select a target category.', 'error');
+    }
+    setBulkSaving(true);
+    const payload = { action: bulkAction, ids };
+    if (bulkAction === 'change_category') payload.category_id = Number(bulkCatId);
+    const d = await api.post('/admin/products/bulk', payload);
+    setBulkSaving(false);
+    if (d.ok) {
+      setSelected(new Set());
+      setBulkAction('');
+      setBulkCatId('');
+      setPage(1);
+      load(true);
+      show(`Done: ${d.affected} product(s) updated.`);
+    } else {
+      show(d.error || 'Failed', 'error');
+    }
+  }
+
   function imgUrl(path) {
     if (!path) return null;
     return '/uploads/' + path.replace(/^.*[\\/]/, '');
   }
+
+  const allChecked = products.length > 0 && selected.size === products.length;
+  const anySelected = selected.size > 0;
 
   return (
     <AdminLayout>
@@ -108,14 +194,43 @@ export default function Products() {
         <button className="btn btn-primary btn-sm" onClick={openAdd}>+ Add Product</button>
       </div>
 
-      <div className="search-bar" style={{ marginBottom: 16 }}>
-        <input type="search" className="form-control" placeholder="Search by design no., jewel code or category…" value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="search-bar" style={{ marginBottom: 12 }}>
+        <input type="search" className="form-control" placeholder="Search by design no., jewel code or category…"
+               value={search} onChange={e => setSearch(e.target.value)} />
       </div>
+
+      {/* Bulk toolbar */}
+      {anySelected && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, padding: '8px 12px', background: 'rgba(139,0,0,0.05)', borderRadius: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--garnet)' }}>{selected.size} selected</span>
+          <select className="form-control form-control-sm" value={bulkAction} onChange={e => { setBulkAction(e.target.value); setBulkCatId(''); }}
+                  style={{ width: 'auto', minWidth: 180 }}>
+            <option value="">— Choose action —</option>
+            <option value="delete">Delete</option>
+            <option value="change_category">Change Category</option>
+            <option value="delete_image">Delete Image</option>
+          </select>
+          {bulkAction === 'change_category' && (
+            <select className="form-control form-control-sm" value={bulkCatId} onChange={e => setBulkCatId(e.target.value)}
+                    style={{ width: 'auto', minWidth: 160 }}>
+              <option value="">— Select category —</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={applyBulk} disabled={bulkSaving || !bulkAction}>
+            {bulkSaving ? <><span className="spinner" />…</> : 'Apply'}
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={() => setSelected(new Set())}>Clear</button>
+        </div>
+      )}
 
       <div className="table-wrap">
         <table className="admin-table">
           <thead>
             <tr>
+              <th style={{ width: 32, padding: '8px 6px' }}>
+                <input type="checkbox" checked={allChecked} onChange={toggleAll} title="Select all" />
+              </th>
               <th>Image</th>
               <Th col="design_number" sort={sort} onSort={handleSort}>Design No.</Th>
               <Th col="jewel_code"    sort={sort} onSort={handleSort}>Jewel Code</Th>
@@ -127,22 +242,72 @@ export default function Products() {
           </thead>
           <tbody>
             {products.length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No products yet.</td></tr>
+              <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No products yet.</td></tr>
             )}
             {products.map(p => (
-              <tr key={p.id}>
-                <td>{imgUrl(p.image_path) ? <img src={imgUrl(p.image_path)} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} alt="" /> : '—'}</td>
-                <td>{p.design_number}</td>
-                <td>{p.jewel_code}</td>
-                <td>{p.category_name}</td>
-                <td>{p.gross_weight ? parseFloat(p.gross_weight).toFixed(3) + 'g' : '—'}</td>
-                <td>{p.net_weight   ? parseFloat(p.net_weight).toFixed(3)   + 'g' : '—'}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="btn btn-sm btn-outline" onClick={() => openEdit(p)}>Edit</button>
-                  {' '}
-                  <button className="btn btn-sm btn-danger" onClick={() => del(p.id)}>Delete</button>
-                </td>
-              </tr>
+              <React.Fragment key={p.id}>
+                <tr style={{ background: selected.has(p.id) ? 'rgba(139,0,0,0.04)' : undefined }}>
+                  <td style={{ padding: '8px 6px' }}>
+                    <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)} />
+                  </td>
+                  <td>
+                    {imgUrl(p.image_path)
+                      ? <img src={imgUrl(p.image_path)} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} alt="" />
+                      : '—'}
+                  </td>
+                  <td>{p.design_number}</td>
+                  <td>{p.jewel_code}</td>
+                  <td>{p.category_name}</td>
+                  <td>{p.gross_weight ? parseFloat(p.gross_weight).toFixed(3) + 'g' : '—'}</td>
+                  <td>{p.net_weight   ? parseFloat(p.net_weight).toFixed(3)   + 'g' : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <button className="btn btn-sm btn-outline" onClick={() => openEdit(p)} style={{ marginRight: 4 }}>Edit</button>
+                    <button className="btn btn-sm btn-outline" onClick={() => qeId === p.id ? setQeId(null) : openQe(p)} style={{ marginRight: 4 }}>
+                      {qeId === p.id ? 'Close' : 'Quick Edit'}
+                    </button>
+                    <button className="btn btn-sm btn-danger" onClick={() => del(p.id)}>Del</button>
+                  </td>
+                </tr>
+
+                {/* Quick Edit inline row */}
+                {qeId === p.id && (
+                  <tr style={{ background: '#fffbe6' }}>
+                    <td colSpan={8} style={{ padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <div className="form-group" style={{ margin: 0, minWidth: 130 }}>
+                          <label style={{ fontSize: 11 }}>Category</label>
+                          <select className="form-control form-control-sm" value={qeForm.category_id} onChange={setQeF('category_id')}>
+                            <option value="">— select —</option>
+                            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ margin: 0, minWidth: 110 }}>
+                          <label style={{ fontSize: 11 }}>Design No.</label>
+                          <input className="form-control form-control-sm" value={qeForm.design_number} onChange={setQeF('design_number')} />
+                        </div>
+                        <div className="form-group" style={{ margin: 0, minWidth: 110 }}>
+                          <label style={{ fontSize: 11 }}>Jewel Code</label>
+                          <input className="form-control form-control-sm" value={qeForm.jewel_code} onChange={setQeF('jewel_code')} />
+                        </div>
+                        <div className="form-group" style={{ margin: 0, width: 90 }}>
+                          <label style={{ fontSize: 11 }}>Gross Wt.</label>
+                          <input className="form-control form-control-sm" type="number" step="0.001" value={qeForm.gross_weight} onChange={setQeF('gross_weight')} />
+                        </div>
+                        <div className="form-group" style={{ margin: 0, width: 90 }}>
+                          <label style={{ fontSize: 11 }}>Net Wt.</label>
+                          <input className="form-control form-control-sm" type="number" step="0.001" value={qeForm.net_weight} onChange={setQeF('net_weight')} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 6, paddingBottom: 2 }}>
+                          <button className="btn btn-primary btn-sm" onClick={() => saveQe(p.id)} disabled={qeSaving}>
+                            {qeSaving ? <><span className="spinner" />…</> : 'Save'}
+                          </button>
+                          <button className="btn btn-outline btn-sm" onClick={() => setQeId(null)}>Cancel</button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
