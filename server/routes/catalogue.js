@@ -1,6 +1,7 @@
 'use strict';
-const router = require('express').Router();
-const db     = require('../db');
+const router  = require('express').Router();
+const db      = require('../db');
+const storage = require('../lib/storage');
 
 // GET /api/catalogue?page=1&category=&search=&mode=public
 router.get('/', async (req, res) => {
@@ -46,7 +47,7 @@ router.get('/', async (req, res) => {
             grossWeight:  p.gross_weight,
             netWeight:    p.net_weight,
             stock:        mode === 'public' ? undefined : p.quantity,
-            image:        p.image_path ? '/uploads/' + p.image_path.replace(/^.*[\\/]/, '') : null,
+            image:        storage.getPublicUrl(p.image_path),
             description:  p.description,
             category:     p.category,
         }));

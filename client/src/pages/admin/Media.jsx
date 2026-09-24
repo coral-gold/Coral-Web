@@ -29,6 +29,7 @@ function LibraryTab() {
   const [page,      setPage]     = useState(1);
   const [pages,     setPages]    = useState(1);
   const [total,     setTotal]    = useState(0);
+  const [storageMode, setStorageMode] = useState(null); // 'local' | 's3'
   const [sort,      setSort]     = useState({ col: 'mtime', dir: 'desc' });
   const [uploading, setUploading]= useState(false);
   const [copied,    setCopied]   = useState(null);
@@ -44,6 +45,7 @@ function LibraryTab() {
       setPage(p);
       setPages(d.pages || 1);
       setTotal(d.total || 0);
+      setStorageMode(d.storageMode || null);
     }
   }
 
@@ -55,16 +57,16 @@ function LibraryTab() {
     setUploading(true);
     const fd = new FormData();
     fd.append('image', file);
-    const d = await api.form('/admin/content/logo', fd);
+    const d = await api.form('/admin/media/upload', fd);
     setUploading(false);
     if (d.ok) { show('Uploaded'); load(1, sort); }
     else show(d.error || 'Upload failed', 'error');
     e.target.value = '';
   }
 
-  async function del(filename) {
+  async function del(key, filename) {
     if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
-    const d = await api.del(`/admin/media/${encodeURIComponent(filename)}`);
+    const d = await api.del(`/admin/media/${encodeURIComponent(key)}`);
     if (d.ok) { show('Deleted'); load(page, sort); }
     else show(d.error || 'Failed', 'error');
   }
@@ -85,6 +87,18 @@ function LibraryTab() {
 
   return (
     <>
+      {storageMode && (
+        storageMode === 's3' ? (
+          <div className="alert alert-success" style={{ marginBottom: 16, fontSize: 13 }}>
+            <strong>Storage: Object storage (S3).</strong> Images live outside the app and survive every code deploy.
+          </div>
+        ) : (
+          <div className="alert alert-warning" style={{ marginBottom: 16, fontSize: 13 }}>
+            <strong>Storage: Local disk.</strong> New uploads survive redeploys only if <code>UPLOAD_DIR</code> is set to a path
+            outside the app folder on the server. Configure S3 (<code>S3_BUCKET</code>, <code>S3_ACCESS_KEY_ID</code>, <code>S3_SECRET_ACCESS_KEY</code>) for the most robust option.
+          </div>
+        )
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
         <input ref={uploadRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleUpload} />
         <button className="btn btn-primary btn-sm" onClick={() => uploadRef.current?.click()} disabled={uploading}>
@@ -92,7 +106,7 @@ function LibraryTab() {
         </button>
       </div>
       <p style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 16 }}>
-        All uploaded images. Links remain valid as long as the file exists on disk.
+        All uploaded images. Links remain valid as long as the file exists in storage.
       </p>
       <div className="table-wrap">
         <table className="admin-table">
@@ -111,7 +125,7 @@ function LibraryTab() {
               <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No images uploaded yet.</td></tr>
             )}
             {files.map(f => (
-              <tr key={f.filename}>
+              <tr key={f.key}>
                 <td>
                   <img src={f.url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, display: 'block' }}
                        onError={e => { e.target.style.display = 'none'; }} />
@@ -128,7 +142,7 @@ function LibraryTab() {
                   <button className="btn btn-sm btn-outline" onClick={() => copyUrl(f.url)} style={{ marginRight: 6 }}>
                     {copied === f.url ? '✓ Copied' : 'Copy URL'}
                   </button>
-                  <button className="btn btn-sm btn-danger" onClick={() => del(f.filename)}>Delete</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => del(f.key, f.filename)}>Delete</button>
                 </td>
               </tr>
             ))}

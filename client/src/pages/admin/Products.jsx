@@ -189,11 +189,6 @@ export default function Products() {
     }
   }
 
-  function imgUrl(path) {
-    if (!path) return null;
-    return '/uploads/' + path.replace(/^.*[\\/]/, '');
-  }
-
   const allChecked = products.length > 0 && selected.size === products.length;
   const anySelected = selected.size > 0;
 
@@ -261,8 +256,8 @@ export default function Products() {
                     <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)} />
                   </td>
                   <td>
-                    {imgUrl(p.image_path)
-                      ? <img src={imgUrl(p.image_path)} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} alt="" />
+                    {p.image_url
+                      ? <img src={p.image_url} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} alt="" />
                       : '—'}
                   </td>
                   <td>{p.design_number}</td>

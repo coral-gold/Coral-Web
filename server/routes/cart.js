@@ -1,6 +1,7 @@
 'use strict';
-const router = require('express').Router();
-const db     = require('../db');
+const router  = require('express').Router();
+const db      = require('../db');
+const storage = require('../lib/storage');
 const { requireParty } = require('../middleware/auth');
 
 router.use(requireParty);
@@ -17,7 +18,7 @@ async function cartPayload(partyId) {
     );
     const lines = rows.map(r => ({
         ...r,
-        image: r.image ? '/uploads/' + r.image.replace(/^.*[\\/]/, '') : null,
+        image: storage.getPublicUrl(r.image),
     }));
     const itemCount  = lines.length;
     const pieceCount = lines.reduce((s, l) => s + l.quantity, 0);

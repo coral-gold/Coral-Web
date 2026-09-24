@@ -22,10 +22,11 @@ app.use(session({
     cookie: { httpOnly: true, maxAge: 8 * 60 * 60 * 1000, sameSite: 'lax' }
 }));
 
-// Static assets (uploaded images) — path resolved from UPLOAD_DIR env var or default
-const { UPLOAD_DIR } = require('./middleware/upload');
-app.use('/uploads', express.static(UPLOAD_DIR));
-console.log('[Uploads] Serving from:', UPLOAD_DIR, ' — set UPLOAD_DIR env var to a path outside the app dir to persist across deployments');
+// Static assets — only serves local-disk uploads (/uploads/*). In S3 mode,
+// images are fetched directly from the bucket's public URL instead, so this
+// route simply goes unused for those images.
+const storage = require('./lib/storage');
+app.use('/uploads', express.static(storage.localDir));
 
 // API routes
 app.use('/api/health',    require('./routes/health'));

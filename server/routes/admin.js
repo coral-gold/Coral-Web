@@ -6,7 +6,8 @@ const fs      = require('fs');
 const XLSX    = require('xlsx');
 const db      = require('../db');
 const { requireAdmin }  = require('../middleware/auth');
-const { imageUpload, xlsxUpload, saveImage, UPLOAD_DIR } = require('../middleware/upload');
+const { imageUpload, xlsxUpload, saveImage } = require('../middleware/upload');
+const storage = require('../lib/storage');
 const { generateQuotationPDF }    = require('../pdf');
 
 router.use(requireAdmin);
@@ -164,7 +165,8 @@ router.get('/products', async (req, res) => {
             `SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON c.id = p.category_id ${where} ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
-        res.json({ ok: true, products: rows, total, pages: Math.max(1, Math.ceil(total / per)), hasMore: offset + rows.length < total });
+        const products = rows.map(p => ({ ...p, image_url: storage.getPublicUrl(p.image_path) }));
+        res.json({ ok: true, products, total, pages: Math.max(1, Math.ceil(total / per)), hasMore: offset + rows.length < total });
     } catch (e) { res.status(500).json({ ok: false }); }
 });
 
@@ -265,11 +267,7 @@ router.post('/products/bulk', async (req, res) => {
                 `SELECT id, image_path FROM products WHERE id IN (${ph}) AND image_path IS NOT NULL AND image_path != ''`,
                 safeIds
             );
-            // Delete files in parallel with async fs (non-blocking)
-            await Promise.all(rows.map(row => {
-                const imgPath = path.join(UPLOAD_DIR, path.basename(row.image_path));
-                return fs.promises.unlink(imgPath).catch(() => {});
-            }));
+            await Promise.all(rows.map(row => storage.delete(row.image_path)));
             await db.query(`UPDATE products SET image_path = NULL WHERE id IN (${ph})`, safeIds);
             return res.json({ ok: true, affected: safeIds.length });
         }
@@ -355,42 +353,51 @@ router.post('/import/preview', xlsxUpload.single('file'), async (req, res) => {
 
 const MEDIA_SORT_COLS = ['filename', 'size', 'mtime'];
 
-router.get('/media', (req, res) => {
+// Standalone upload for the Media Library's "+ Upload Image" button — just
+// adds an image to the library, unrelated to the site logo (POST /content).
+router.post('/media/upload', imageUpload.single('image'), async (req, res) => {
+    if (!req.file) return res.json({ ok: false, error: 'image required.' });
+    try {
+        const key = await saveImage(req.file);
+        res.json({ ok: true, key, url: storage.getPublicUrl(key) });
+    } catch (e) {
+        console.error('[media upload]', e);
+        res.json({ ok: false, error: e.message });
+    }
+});
+
+router.get('/media', async (req, res) => {
     try {
         const page    = Math.max(1, parseInt(req.query.page) || 1);
         const per     = 25;
         const sortCol = MEDIA_SORT_COLS.includes(req.query.sort) ? req.query.sort : 'mtime';
         const sortDir = req.query.order === 'asc' ? 1 : -1;
 
-        const IMAGE_RE = /\.(jpe?g|png|gif|webp|svg)$/i;
-        const files = fs.readdirSync(UPLOAD_DIR)
-            .filter(f => IMAGE_RE.test(f) && f !== '.gitkeep')
-            .map(f => {
-                const stat = fs.statSync(path.join(UPLOAD_DIR, f));
-                return { filename: f, url: '/uploads/' + f, size: stat.size, mtime: stat.mtimeMs };
-            })
-            .sort((a, b) => {
-                let va = a[sortCol], vb = b[sortCol];
-                if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
-                const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-                return cmp * sortDir;
-            });
+        const files = (await storage.list()).sort((a, b) => {
+            let va = a[sortCol], vb = b[sortCol];
+            if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+            const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+            return cmp * sortDir;
+        });
 
         const total  = files.length;
         const offset = (page - 1) * per;
-        res.json({ ok: true, files: files.slice(offset, offset + per), total, pages: Math.max(1, Math.ceil(total / per)) });
+        res.json({
+            ok: true, storageMode: storage.mode,
+            files: files.slice(offset, offset + per), total, pages: Math.max(1, Math.ceil(total / per)),
+        });
     } catch (e) {
         console.error('[media list]', e);
         res.json({ ok: false, error: e.message });
     }
 });
 
-router.delete('/media/:filename', (req, res) => {
-    const fn = path.basename(req.params.filename); // prevent path traversal
-    if (!fn || fn === '.gitkeep') return res.json({ ok: false, error: 'Invalid filename.' });
-    const filepath = path.join(UPLOAD_DIR, fn);
+// :key is the opaque storage key (e.g. "local:foo.jpg" or "s3:foo.jpg"), URL-encoded by the client
+router.delete('/media/:key', async (req, res) => {
+    const key = decodeURIComponent(req.params.key);
+    if (!key) return res.json({ ok: false, error: 'Invalid key.' });
     try {
-        if (fs.existsSync(filepath)) fs.unlinkSync(filepath);
+        await storage.delete(key);
         res.json({ ok: true });
     } catch (e) { res.json({ ok: false, error: e.message }); }
 });
@@ -603,7 +610,7 @@ router.post('/import/images', imageUpload.single('image'), async (req, res) => {
         }
         // Remove orphan file when no product matched
         if (affectedRows === 0) {
-            fs.promises.unlink(path.join(UPLOAD_DIR, filename)).catch(() => {});
+            storage.delete(filename);
         }
         res.json({ ok: true, filename, matched: affectedRows > 0 });
     } catch (e) {
@@ -802,8 +809,11 @@ router.post('/content', imageUpload.single('site_logo'), async (req, res) => {
         }
         let logo_url = null;
         if (req.file) {
-            const filename = await saveImage(req.file);
-            const p = '/uploads/' + filename;
+            const key = await saveImage(req.file);
+            // content.site_logo is read verbatim by the public site with no
+            // server-side resolution step, so store the resolved URL here
+            // (not the opaque storage key) — correct for both local and S3.
+            const p = storage.getPublicUrl(key);
             await db.query(
                 'INSERT INTO content (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?',
                 ['site_logo', p, p]

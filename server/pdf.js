@@ -1,9 +1,6 @@
 'use strict';
-const fs   = require('fs');
-const path = require('path');
 const PDFDocument = require('pdfkit');
-
-const UPLOAD_DIR = path.join(__dirname, '../assets/uploads');
+const storage = require('./lib/storage');
 
 function fmtW(v) {
     if (v == null || v === '') return '—';
@@ -44,7 +41,7 @@ function drawTableHeader(doc, y, withImages) {
 }
 
 // ── Main generator ────────────────────────────────────────────────────────────
-function generateQuotationPDF(quotation, party, items, options = {}) {
+async function generateQuotationPDF(quotation, party, items, options = {}) {
     const { withImages = false, itemImages = {} } = options;
     const ROW_H = withImages ? 50 : 18;
 
@@ -52,6 +49,19 @@ function generateQuotationPDF(quotation, party, items, options = {}) {
     const cols = withImages
         ? [L, L+46, L+136, L+236, L+306, L+376, L+436, L+W]
         : [L, L+90, L+195, L+270, L+345, L+410, L+W];
+
+    // Pre-fetch every needed image as a Buffer before drawing starts — PDFKit's
+    // synchronous drawing loop can't await mid-stream, and storage.getBuffer()
+    // (S3 or local) is async either way.
+    const imageBuffers = {};
+    if (withImages) {
+        for (const it of items) {
+            const key = itemImages[it.product_id];
+            if (key && imageBuffers[it.product_id] === undefined) {
+                imageBuffers[it.product_id] = await storage.getBuffer(key);
+            }
+        }
+    }
 
     return new Promise((resolve, reject) => {
         const chunks = [];
@@ -114,14 +124,11 @@ function generateQuotationPDF(quotation, party, items, options = {}) {
 
             // Image column
             if (withImages) {
-                const imgFile = itemImages[it.product_id];
-                if (imgFile) {
-                    const imgPath = path.join(UPLOAD_DIR, path.basename(imgFile));
-                    if (fs.existsSync(imgPath)) {
-                        try {
-                            doc.image(imgPath, L + 3, y + 5, { fit: [38, 38] });
-                        } catch (_) { /* unsupported format — skip */ }
-                    }
+                const buf = imageBuffers[it.product_id];
+                if (buf) {
+                    try {
+                        doc.image(buf, L + 3, y + 5, { fit: [38, 38] });
+                    } catch (_) { /* unsupported format — skip */ }
                 }
             }
 

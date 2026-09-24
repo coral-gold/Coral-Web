@@ -1,30 +1,7 @@
 'use strict';
-const multer = require('multer');
-const path   = require('path');
-const fs     = require('fs');
-
-// Set UPLOAD_DIR env var to a path OUTSIDE the app directory (e.g. /home/u123456/uploads)
-// so images survive git-pull deployments. Defaults to assets/uploads inside the repo.
-const DEFAULT_UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
-let UPLOAD_DIR = process.env.UPLOAD_DIR
-    ? path.resolve(process.env.UPLOAD_DIR)
-    : DEFAULT_UPLOAD_DIR;
-
-// A bad UPLOAD_DIR (unwritable / invalid path) must never crash the whole
-// app at require() time — fall back to the in-repo default so every other
-// route still works, and log loudly so the misconfiguration is visible.
-try {
-    if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    fs.accessSync(UPLOAD_DIR, fs.constants.W_OK);
-} catch (e) {
-    console.error(`[Uploads] UPLOAD_DIR "${UPLOAD_DIR}" is not usable (${e.message}). Falling back to ${DEFAULT_UPLOAD_DIR}.`);
-    UPLOAD_DIR = DEFAULT_UPLOAD_DIR;
-    try {
-        if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-    } catch (e2) {
-        console.error('[Uploads] Fallback upload dir also failed:', e2.message);
-    }
-}
+const multer  = require('multer');
+const path    = require('path');
+const storage = require('../lib/storage');
 
 const imageUpload = multer({
     storage: multer.memoryStorage(),
@@ -45,26 +22,25 @@ const xlsxUpload = multer({
     }
 });
 
-// Compress with sharp: 800px max, quality 75 — same approach as WordPress thumbnail generation.
-// Falls back to saving original if sharp is unavailable.
+// Compress with sharp: 800px max, quality 75 — same approach as WordPress
+// thumbnail generation. Falls back to the original bytes if sharp is
+// unavailable. Returns the storage key to persist in the DB (image_path).
 async function saveImage(file) {
     const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
     const basename = Date.now() + '-' + safeName.replace(/\.[^.]+$/, '');
     try {
         const sharp = require('sharp');
         const filename = basename + '.jpg';
-        const filepath = path.join(UPLOAD_DIR, filename);
-        await sharp(file.buffer)
+        const buffer = await sharp(file.buffer)
             .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
             .jpeg({ quality: 75 })
-            .toFile(filepath);
-        return filename;
+            .toBuffer();
+        return storage.save(buffer, filename, 'image/jpeg');
     } catch (e) {
         const ext = path.extname(file.originalname) || '.jpg';
         const filename = basename + ext;
-        fs.writeFileSync(path.join(UPLOAD_DIR, filename), file.buffer);
-        return filename;
+        return storage.save(file.buffer, filename, file.mimetype);
     }
 }
 
-module.exports = { imageUpload, xlsxUpload, saveImage, UPLOAD_DIR };
+module.exports = { imageUpload, xlsxUpload, saveImage };
