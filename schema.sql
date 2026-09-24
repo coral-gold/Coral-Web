@@ -27,6 +27,32 @@ CREATE TABLE IF NOT EXISTS products (
     INDEX idx_active (active)
 );
 
+-- Many-to-many product↔category. products.category_id remains the "primary"
+-- category (used for Excel import, sort/display fallback); every category a
+-- product belongs to — including the primary — also has a row here, so all
+-- filtering/display code has one consistent source of truth to query.
+CREATE TABLE IF NOT EXISTS product_categories (
+    product_id INT NOT NULL,
+    category_id INT NOT NULL,
+    PRIMARY KEY (product_id, category_id),
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS tags (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS product_tags (
+    product_id INT NOT NULL,
+    tag_id INT NOT NULL,
+    PRIMARY KEY (product_id, tag_id),
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS parties (
     id INT PRIMARY KEY AUTO_INCREMENT,
     party_id VARCHAR(20) NOT NULL UNIQUE,
@@ -107,4 +133,11 @@ INSERT IGNORE INTO content (key_name, value) VALUES
     ('about_text', 'Coral Gold is a premier wholesale jewellery house specialising in handcrafted gold ornaments.'),
     ('contact_email', 'info@coralgold.in'),
     ('contact_phone', '+91 98765 43210'),
-    ('contact_address', 'Mumbai, Maharashtra, India');
+    ('contact_address', 'Mumbai, Maharashtra, India'),
+    ('wholesaler_enabled', '1'),
+    ('site_lock_enabled', '0'),
+    ('site_lock_password_hash', ''),
+    ('show_net_weight', '1'),
+    ('show_gross_weight', '1'),
+    ('show_amount', '1'),
+    ('pdf_layout', 'grid2');

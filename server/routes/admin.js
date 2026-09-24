@@ -9,6 +9,7 @@ const { requireAdmin }  = require('../middleware/auth');
 const { imageUpload, xlsxUpload, saveImage } = require('../middleware/upload');
 const storage = require('../lib/storage');
 const { generateQuotationPDF }    = require('../pdf');
+const { getPdfSettings }          = require('../lib/settings');
 
 router.use(requireAdmin);
 
@@ -130,9 +131,27 @@ router.post('/categories/merge', async (req, res) => {
             `UPDATE products SET category_id = ? WHERE category_id IN (${placeholders})`,
             [targetId, ...ids]
         );
+        // Re-point every product_categories membership from a source category
+        // to the target before the source rows get cascade-deleted below —
+        // otherwise a product's non-primary membership in a merged category
+        // would just vanish instead of becoming a membership in the target.
+        await db.query(
+            `INSERT IGNORE INTO product_categories (product_id, category_id)
+             SELECT product_id, ? FROM product_categories WHERE category_id IN (${placeholders})`,
+            [targetId, ...ids]
+        );
         await db.query(`DELETE FROM categories WHERE id IN (${placeholders})`, ids);
         res.json({ ok: true, moved: ids.length });
     } catch (e) { console.error(e); res.json({ ok: false, error: e.message }); }
+});
+
+// GET /admin/tags — every distinct tag in use, for the Add/Edit Product
+// autocomplete suggestions.
+router.get('/tags', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT id, name FROM tags ORDER BY name');
+        res.json({ ok: true, tags: rows });
+    } catch (e) { res.status(500).json({ ok: false }); }
 });
 
 // ── Products ───────────────────────────────────────────────────────────────────
@@ -146,6 +165,70 @@ const PRODUCT_SORT_COLS = {
     created_at:    'p.created_at',
 };
 
+// Attach every product's full category list and tag list in one batched
+// query each (not per-row), keyed by product id, for the admin list/detail
+// views. category_id/category_name (the primary) stay on the row itself.
+async function attachCategoriesAndTags(products) {
+    if (!products.length) return products;
+    const ids = products.map(p => p.id);
+    const ph  = ids.map(() => '?').join(',');
+    const [catRows] = await db.query(
+        `SELECT pc.product_id, c.id, c.name FROM product_categories pc
+         JOIN categories c ON c.id = pc.category_id WHERE pc.product_id IN (${ph}) ORDER BY c.name`,
+        ids
+    );
+    const [tagRows] = await db.query(
+        `SELECT pt.product_id, t.id, t.name FROM product_tags pt
+         JOIN tags t ON t.id = pt.tag_id WHERE pt.product_id IN (${ph}) ORDER BY t.name`,
+        ids
+    );
+    const catsByProduct = {}, tagsByProduct = {};
+    for (const r of catRows) (catsByProduct[r.product_id] ??= []).push({ id: r.id, name: r.name });
+    for (const r of tagRows) (tagsByProduct[r.product_id] ??= []).push({ id: r.id, name: r.name });
+    return products.map(p => ({
+        ...p,
+        categories: catsByProduct[p.id] || [],
+        tags:       tagsByProduct[p.id] || [],
+    }));
+}
+
+// Replaces a product's full set of categories/tags. Always keeps the
+// product's primary category_id included in product_categories, so every
+// query can read product_categories alone as the complete source of truth.
+async function syncProductCategories(productId, categoryIds, primaryCategoryId) {
+    const ids = new Set(categoryIds.map(Number).filter(n => Number.isInteger(n) && n > 0));
+    if (primaryCategoryId) ids.add(Number(primaryCategoryId));
+    await db.query('DELETE FROM product_categories WHERE product_id = ?', [productId]);
+    if (ids.size) {
+        const values = [...ids].map(catId => [productId, catId]);
+        await db.query('INSERT IGNORE INTO product_categories (product_id, category_id) VALUES ?', [values]);
+    }
+}
+
+// Free-text tag names — created on the fly (like Excel import does for
+// categories), deduped case-insensitively.
+async function syncProductTags(productId, tagNames) {
+    const names = [...new Set(tagNames.map(t => t.trim()).filter(Boolean).map(t => t.toLowerCase()))];
+    await db.query('DELETE FROM product_tags WHERE product_id = ?', [productId]);
+    if (!names.length) return;
+    for (const name of names) {
+        await db.query('INSERT IGNORE INTO tags (name) VALUES (?)', [name]);
+    }
+    const ph = names.map(() => '?').join(',');
+    const [tagRows] = await db.query(`SELECT id FROM tags WHERE name IN (${ph})`, names);
+    if (tagRows.length) {
+        const values = tagRows.map(t => [productId, t.id]);
+        await db.query('INSERT IGNORE INTO product_tags (product_id, tag_id) VALUES ?', [values]);
+    }
+}
+
+// FormData sends a repeated field ("category_ids") as either a single string
+// or an array depending on how many values were appended — normalize both.
+function toArray(v) {
+    if (v === undefined || v === null || v === '') return [];
+    return Array.isArray(v) ? v : [v];
+}
+
 router.get('/products', async (req, res) => {
     const page    = Math.max(1, parseInt(req.query.page) || 1);
     const per     = 25;
@@ -156,9 +239,9 @@ router.get('/products', async (req, res) => {
 
     const conds = ['p.active = 1'], params = [];
     if (search) {
-        conds.push('(p.design_number LIKE ? OR p.jewel_code LIKE ? OR c.name LIKE ?)');
+        conds.push('(p.design_number LIKE ? OR p.jewel_code LIKE ? OR c.name LIKE ? OR EXISTS (SELECT 1 FROM product_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.product_id = p.id AND t.name LIKE ?))');
         const l = `%${search}%`;
-        params.push(l, l, l);
+        params.push(l, l, l, l);
     }
     const where = 'WHERE ' + conds.join(' AND ');
     try {
@@ -169,9 +252,10 @@ router.get('/products', async (req, res) => {
             `SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON c.id = p.category_id ${where} ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
-        const products = rows.map(p => ({ ...p, image_url: storage.getPublicUrl(p.image_path) }));
+        const withMeta = await attachCategoriesAndTags(rows);
+        const products = withMeta.map(p => ({ ...p, image_url: storage.getPublicUrl(p.image_path) }));
         res.json({ ok: true, products, total, pages: Math.max(1, Math.ceil(total / per)), hasMore: offset + rows.length < total });
-    } catch (e) { res.status(500).json({ ok: false }); }
+    } catch (e) { console.error('[products list]', e); res.status(500).json({ ok: false }); }
 });
 
 // "Select all N matching" for bulk actions — returns every product id
@@ -197,7 +281,8 @@ router.get('/products/ids', async (req, res) => {
 router.get('/products/:id', async (req, res) => {
     const [[p]] = await db.query('SELECT * FROM products WHERE id = ?', [req.params.id]);
     if (!p) return res.status(404).json({ ok: false });
-    res.json({ ok: true, product: p });
+    const [withMeta] = await attachCategoriesAndTags([p]);
+    res.json({ ok: true, product: withMeta });
 });
 
 // Add/Edit Product post FormData (for image upload), so a checked/unchecked
@@ -229,17 +314,23 @@ function productSaveError(e, action) {
 }
 
 router.post('/products', imageUpload.single('image'), async (req, res) => {
-    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured, amount } = req.body;
-    if (!category_id || !design_number || !jewel_code) {
+    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured, amount, tags } = req.body;
+    const categoryIds = toArray(req.body.category_ids);
+    if ((!category_id && !categoryIds.length) || !design_number || !jewel_code) {
         return res.json({ ok: false, error: 'Category, Design Number and Jewel Code are required.' });
     }
+    // Primary category = the explicit category_id, or the first of the
+    // multi-select when only category_ids was sent.
+    const primaryCategoryId = category_id || categoryIds[0];
     try {
         const imgPath = req.file ? await saveImage(req.file) : null;
         const [r] = await db.query(
             'INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, image_path, description, is_featured, amount) VALUES (?,?,?,?,?,?,?,?,?)',
-            [category_id, design_number, jewel_code, gross_weight || null, net_weight || null,
+            [primaryCategoryId, design_number, jewel_code, gross_weight || null, net_weight || null,
              imgPath, description || null, toBool(is_featured) ? 1 : 0, amount || null]
         );
+        await syncProductCategories(r.insertId, categoryIds, primaryCategoryId);
+        if (tags !== undefined) await syncProductTags(r.insertId, String(tags).split(','));
         res.json({ ok: true, id: r.insertId });
     } catch (e) {
         res.json({ ok: false, error: productSaveError(e, 'add') });
@@ -252,7 +343,7 @@ router.post('/products', imageUpload.single('image'), async (req, res) => {
 // (description, is_featured) was silently overwritten with NULL/0 on every
 // save, corrupting data without any error being shown.
 router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
-    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured, amount } = req.body;
+    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured, amount, tags } = req.body;
     if (!category_id || !design_number || !jewel_code) {
         return res.json({ ok: false, error: 'Category, Design Number and Jewel Code are required.' });
     }
@@ -268,6 +359,18 @@ router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
         }
         const [r] = await db.query(`UPDATE products SET ${sets.join(',')} WHERE id = ?`, [...vals, req.params.id]);
         if (r.affectedRows === 0) return res.json({ ok: false, error: 'Product not found.' });
+
+        // Only the full Add/Edit modal sends category_ids — Quick Edit
+        // intentionally omits it so it never wipes a product's other
+        // category memberships. Either way, the (possibly changed) primary
+        // category is always kept linked.
+        if (req.body.category_ids !== undefined) {
+            await syncProductCategories(req.params.id, toArray(req.body.category_ids), category_id);
+        } else {
+            await db.query('INSERT IGNORE INTO product_categories (product_id, category_id) VALUES (?, ?)', [req.params.id, category_id]);
+        }
+        if (tags !== undefined) await syncProductTags(req.params.id, String(tags).split(','));
+
         res.json({ ok: true });
     } catch (e) {
         res.json({ ok: false, error: productSaveError(e, 'edit') });
@@ -339,6 +442,12 @@ router.post('/products/bulk', async (req, res) => {
             const catId = Number(category_id);
             if (!catId) return res.json({ ok: false, error: 'category_id required.' });
             await db.query(`UPDATE products SET category_id = ? WHERE id IN (${ph})`, [catId, ...safeIds]);
+            // Keep the new primary linked without touching each product's
+            // other category memberships (same rule as Quick Edit).
+            await db.query(
+                `INSERT IGNORE INTO product_categories (product_id, category_id) VALUES ${safeIds.map(() => '(?, ?)').join(',')}`,
+                safeIds.flatMap(id => [id, catId])
+            );
             return res.json({ ok: true, affected: safeIds.length });
         }
         if (action === 'delete_image') {
@@ -606,13 +715,16 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                 [finalDesign]
             );
 
+            let productId = null, productCatId = null;
+
             if (!existing) {
-                await db.query(
+                const [ins] = await db.query(
                     `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, description, amount)
                      VALUES (?,?,?,?,?,?,?)`,
                     [catId, finalDesign, jewelCode, grossWt, netWt, descr, amountVal]
                 );
                 inserted++;
+                productId = ins.insertId; productCatId = catId;
             } else if (strat === 'skip') {
                 skipped++;
             } else if (strat === 'fill') {
@@ -626,6 +738,7 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                 if (sets.length) {
                     await db.query(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`, [...vals, existing.id]);
                     updated++;
+                    productId = existing.id; productCatId = existing.category_id || catId;
                 } else { skipped++; }
             } else if (strat === 'merge') {
                 await db.query(
@@ -640,6 +753,7 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                     [jewelCode, catId || null, grossWt, netWt, descr, amountVal, existing.id]
                 );
                 updated++;
+                productId = existing.id; productCatId = catId || existing.category_id;
             } else if (strat === 'replace') {
                 // Overwrite every field unconditionally — same end state as
                 // delete+insert, but as an UPDATE-in-place: keeps the same row
@@ -651,6 +765,14 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                     [catId, jewelCode, grossWt, netWt, descr, amountVal, existing.id]
                 );
                 updated++;
+                productId = existing.id; productCatId = catId;
+            }
+
+            // Keep the multi-category junction table consistent with whatever
+            // primary category this row ended up with, without disturbing any
+            // additional categories a product may already have (Batch 18).
+            if (productId && productCatId) {
+                await db.query('INSERT IGNORE INTO product_categories (product_id, category_id) VALUES (?, ?)', [productId, productCatId]);
             }
         } catch (e) {
             errors.push(`Row ${r + 1} (${jewelCode}): ${e.message}`);
@@ -865,7 +987,8 @@ router.get('/quotations/:id/pdf', async (req, res) => {
             }
         }
 
-        const buf    = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items, { withImages, itemImages });
+        const pdfSettings = await getPdfSettings();
+        const buf    = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items, { withImages, itemImages, ...pdfSettings });
         const suffix = withImages ? '-with-images' : '';
         res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${q.quotation_number}${suffix}.pdf"`, 'Content-Length': buf.length });
         res.end(buf);
@@ -880,11 +1003,10 @@ router.get('/content', async (req, res) => {
     res.json({ ok: true, content: data });
 });
 
-router.post('/content', imageUpload.single('site_logo'), async (req, res) => {
+router.post('/content', async (req, res) => {
     const textFields = [
         'home_hero_title','home_hero_subtitle','about_text',
         'contact_email','contact_phone','contact_address',
-        'primary_color','accent_color'
     ];
     try {
         for (const key of textFields) {
@@ -896,21 +1018,74 @@ router.post('/content', imageUpload.single('site_logo'), async (req, res) => {
                 );
             }
         }
-        let logo_url = null;
-        if (req.file) {
-            const key = await saveImage(req.file);
-            // content.site_logo is read verbatim by the public site with no
-            // server-side resolution step, so store the resolved URL here
-            // (not the opaque storage key) — correct for both local and S3.
-            const p = storage.getPublicUrl(key);
-            await db.query(
-                'INSERT INTO content (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?',
-                ['site_logo', p, p]
-            );
-            logo_url = p;
-        }
-        res.json({ ok: true, logo_url });
+        res.json({ ok: true });
     } catch (e) { console.error(e); res.status(500).json({ ok: false }); }
+});
+
+// ── Settings ───────────────────────────────────────────────────────────────────
+// One place for every site-wide on/off toggle plus the logo/favicon and PDF
+// layout choice — deliberately kept as simple key/value rows in the same
+// `content` table as the text/logo settings, so adding another toggle later
+// never needs a schema change.
+
+const SETTINGS_BOOL_KEYS = ['wholesaler_enabled', 'site_lock_enabled', 'show_net_weight', 'show_gross_weight', 'show_amount'];
+const PDF_LAYOUTS = ['grid2', 'grid3', 'list'];
+
+router.get('/settings', async (req, res) => {
+    try {
+        const keys = [...SETTINGS_BOOL_KEYS, 'pdf_layout', 'site_logo', 'site_favicon'];
+        const [rows] = await db.query(
+            `SELECT key_name, value FROM content WHERE key_name IN (${keys.map(() => '?').join(',')})`,
+            keys
+        );
+        const raw = Object.fromEntries(rows.map(r => [r.key_name, r.value]));
+        res.json({
+            ok: true,
+            settings: {
+                wholesalerEnabled: raw.wholesaler_enabled !== '0',
+                siteLockEnabled:   raw.site_lock_enabled === '1',
+                showNetWeight:     raw.show_net_weight   !== '0',
+                showGrossWeight:   raw.show_gross_weight !== '0',
+                showAmount:        raw.show_amount       !== '0',
+                pdfLayout:         PDF_LAYOUTS.includes(raw.pdf_layout) ? raw.pdf_layout : 'grid2',
+                siteLogo:          raw.site_logo    || null,
+                siteFavicon:       raw.site_favicon || null,
+            },
+        });
+    } catch (e) { console.error('[settings get]', e); res.status(500).json({ ok: false }); }
+});
+
+router.post('/settings', imageUpload.fields([{ name: 'logo', maxCount: 1 }, { name: 'favicon', maxCount: 1 }]), async (req, res) => {
+    try {
+        const setKV = (key, value) => db.query(
+            'INSERT INTO content (key_name,value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?', [key, value, value]
+        );
+
+        for (const key of SETTINGS_BOOL_KEYS) {
+            if (req.body[key] !== undefined) await setKV(key, toBool(req.body[key]) ? '1' : '0');
+        }
+        if (req.body.pdf_layout !== undefined && PDF_LAYOUTS.includes(req.body.pdf_layout)) {
+            await setKV('pdf_layout', req.body.pdf_layout);
+        }
+        if (req.body.site_lock_password) {
+            const hash = await bcrypt.hash(String(req.body.site_lock_password), 10);
+            await setKV('site_lock_password_hash', hash);
+        }
+
+        let logo_url = null, favicon_url = null;
+        if (req.files?.logo?.[0]) {
+            const key = await saveImage(req.files.logo[0]);
+            logo_url = storage.getPublicUrl(key);
+            await setKV('site_logo', logo_url);
+        }
+        if (req.files?.favicon?.[0]) {
+            const key = await saveImage(req.files.favicon[0]);
+            favicon_url = storage.getPublicUrl(key);
+            await setKV('site_favicon', favicon_url);
+        }
+
+        res.json({ ok: true, logo_url, favicon_url });
+    } catch (e) { console.error('[settings save]', e); res.status(500).json({ ok: false, error: e.message }); }
 });
 
 module.exports = router;

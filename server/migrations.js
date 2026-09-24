@@ -21,6 +21,56 @@ async function runMigrations() {
         // Free-text note a party can attach per item, replacing order quantity.
         await addColumnIfMissing('cart_items', 'remark', "TEXT NULL");
         await addColumnIfMissing('quotation_items', 'remark', "TEXT NULL");
+
+        // Batch 18: multi-category + tags (already in schema.sql for new
+        // installs; an existing production DB needs these created explicitly).
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS product_categories (
+                product_id INT NOT NULL,
+                category_id INT NOT NULL,
+                PRIMARY KEY (product_id, category_id),
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+            )
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS tags (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                name VARCHAR(50) NOT NULL UNIQUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS product_tags (
+                product_id INT NOT NULL,
+                tag_id INT NOT NULL,
+                PRIMARY KEY (product_id, tag_id),
+                FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+                FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            )
+        `);
+        // Backfill: every product's existing primary category also becomes a
+        // row here, so filtering/display code only ever needs to read
+        // product_categories, never products.category_id directly.
+        await db.query(`
+            INSERT IGNORE INTO product_categories (product_id, category_id)
+            SELECT id, category_id FROM products
+        `);
+
+        // Batch 18: Settings module — defaults for an already-deployed DB
+        // (schema.sql's INSERT IGNORE only runs for a brand-new database).
+        const SETTINGS_DEFAULTS = {
+            wholesaler_enabled:      '1',
+            site_lock_enabled:       '0',
+            site_lock_password_hash: '',
+            show_net_weight:         '1',
+            show_gross_weight:       '1',
+            show_amount:             '1',
+            pdf_layout:              'grid2',
+        };
+        for (const [key, value] of Object.entries(SETTINGS_DEFAULTS)) {
+            await db.query('INSERT IGNORE INTO content (key_name, value) VALUES (?, ?)', [key, value]);
+        }
     } catch (e) {
         console.error('[migrations] failed:', e.message);
     }

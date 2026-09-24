@@ -3,17 +3,25 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useSiteContent } from '../context/SiteContentContext';
+import { handleLogoError } from '../utils/image';
 import QuotationPanel from './QuotationPanel';
 
 export default function WholesalerLayout({ children }) {
   const { party, partyLogout, loading } = useAuth();
   const { cart, refresh, setPanelOpen, panelOpen } = useCart();
-  const { logoUrl } = useSiteContent();
+  const { logoUrl, settings, loaded } = useSiteContent();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading && !party) navigate('/wholesaler/login', { replace: true });
   }, [party, loading, navigate]);
+
+  // Admin can disable the wholesaler module at any time — cut an already-open
+  // session off immediately rather than leaving it looking usable while every
+  // API call quietly starts failing.
+  useEffect(() => {
+    if (loaded && !settings.wholesalerEnabled) navigate('/wholesaler/login', { replace: true });
+  }, [loaded, settings.wholesalerEnabled, navigate]);
 
   useEffect(() => {
     if (party) refresh();
@@ -31,7 +39,7 @@ export default function WholesalerLayout({ children }) {
       <header className="site-header">
         <div className="container">
           <Link className="logo" to="/wholesaler/catalogue">
-            <img className="logo-img" src={logoUrl} alt="Coral Gold" />
+            <img className="logo-img" src={logoUrl} alt="Coral Gold" onError={handleLogoError} />
           </Link>
           <nav>
             <Link to="/wholesaler/catalogue">Catalogue</Link>

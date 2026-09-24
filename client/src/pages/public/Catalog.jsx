@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/PublicLayout';
 import { useLightbox } from '../../components/ImageLightbox';
+import CatalogImage from '../../components/CatalogImage';
+import { useSiteContent } from '../../context/SiteContentContext';
 import api from '../../api';
 
 // Public catalog is a preview, not the real catalogue: a limited set of
@@ -12,6 +14,7 @@ export default function Catalog() {
   const [categories, setCategories] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const openImage = useLightbox();
+  const { settings } = useSiteContent();
 
   useEffect(() => {
     api.get('/catalogue/preview').then(d => {
@@ -26,7 +29,11 @@ export default function Catalog() {
         <div className="container">
           <h1 style={{ fontSize: 38 }}>Our Catalogue</h1>
           <div className="gold-line" />
-          <p style={{ fontSize: 15 }}>A preview of our collection — log in as a wholesaler to browse the full catalogue and place orders.</p>
+          <p style={{ fontSize: 15 }}>
+            {settings.wholesalerEnabled
+              ? 'A preview of our collection — log in as a wholesaler to browse the full catalogue and place orders.'
+              : 'A preview of our collection.'}
+          </p>
         </div>
       </section>
 
@@ -47,10 +54,11 @@ export default function Catalog() {
               <div className="catalog-grid">
                 {cat.products.map(p => (
                   <div key={p.id} className="pub-card">
-                    {p.image
-                      ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" onClick={() => openImage(p.image)} style={{ cursor: 'zoom-in' }} />
-                      : <div className="pub-card-img-placeholder">💍</div>
-                    }
+                    <CatalogImage
+                      src={p.image} alt={p.designNo} loading="lazy"
+                      imgClassName="pub-card-img" placeholderClassName="pub-card-img-placeholder"
+                      onClick={() => openImage(p.image)}
+                    />
                     <div className="pub-card-body">
                       <div className="design-no">{p.designNo}</div>
                     </div>
@@ -60,7 +68,7 @@ export default function Catalog() {
             </div>
           ))}
 
-          {!loading && categories.length > 0 && (
+          {!loading && categories.length > 0 && settings.wholesalerEnabled && (
             <div style={{ textAlign: 'center', marginTop: 20, padding: '32px 20px', background: 'var(--surface)', borderRadius: 'var(--radius)' }}>
               <p style={{ marginBottom: 16, color: 'var(--mid)' }}>
                 This is a preview — log in as a wholesaler to see the full catalogue, weights, and place orders.

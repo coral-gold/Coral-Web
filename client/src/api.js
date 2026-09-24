@@ -22,7 +22,7 @@ async function req(method, url, body, isForm = false, opts = {}) {
       }
     }
     const r = await fetch(BASE + url, fetchOpts);
-    if (!r.ok && r.status !== 401 && r.status !== 403 && r.status !== 404) {
+    if (!r.ok && r.status !== 401 && r.status !== 403 && r.status !== 404 && r.status !== 423) {
       const txt = await r.text().catch(() => '');
       throw new Error(txt || `HTTP ${r.status}`);
     }

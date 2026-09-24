@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSiteContent } from '../context/SiteContentContext';
+import { handleLogoError } from '../utils/image';
 import { useToast } from './Toast';
 import api from '../api';
 
@@ -13,6 +14,7 @@ const NAV = [
   { to: '/admin/parties',     label: 'Parties' },
   { to: '/admin/quotations',  label: 'Quotations' },
   { to: '/admin/content',     label: 'Content' },
+  { to: '/admin/settings',    label: 'Settings' },
   { to: '/admin/media',       label: 'Media' },
 ];
 
@@ -90,7 +92,7 @@ export default function AdminLayout({ children }) {
       <header className="admin-header">
         <div className="container">
           <NavLink className="logo" to="/admin/dashboard">
-            <img className="logo-img" src={logoUrl} alt="Coral Gold Admin" />
+            <img className="logo-img" src={logoUrl} alt="Coral Gold Admin" onError={handleLogoError} />
           </NavLink>
           <nav className="admin-header-nav">
             {NAV.map(n => <NavLink key={n.to} to={n.to}>{n.label}</NavLink>)}

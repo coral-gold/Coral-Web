@@ -3,6 +3,7 @@ const router = require('express').Router();
 const db     = require('../db');
 const { requireParty } = require('../middleware/auth');
 const { generateQuotationPDF } = require('../pdf');
+const { getPdfSettings } = require('../lib/settings');
 
 router.use(requireParty);
 
@@ -114,7 +115,8 @@ router.get('/:id/pdf', async (req, res) => {
             }
         }
 
-        const pdfBuffer = await generateQuotationPDF(q, party, items, { withImages, itemImages });
+        const pdfSettings = await getPdfSettings();
+        const pdfBuffer = await generateQuotationPDF(q, party, items, { withImages, itemImages, ...pdfSettings });
         const suffix = withImages ? '-with-images' : '';
         res.set({
             'Content-Type':        'application/pdf',

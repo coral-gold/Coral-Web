@@ -3,9 +3,10 @@ import AdminLayout from '../../components/AdminLayout';
 import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
 import { useLightbox } from '../../components/ImageLightbox';
+import { handleImgError } from '../../utils/image';
 import api from '../../api';
 
-const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', amount: '', description: '', is_featured: false };
+const EMPTY = { design_number: '', jewel_code: '', category_ids: [], gross_weight: '', net_weight: '', amount: '', description: '', is_featured: false, tags: '' };
 
 function Th({ col, sort, onSort, children }) {
   const active = sort.col === col;
@@ -22,6 +23,8 @@ function Th({ col, sort, onSort, children }) {
 export default function Products() {
   const [products,      setProducts]      = useState([]);
   const [categories,    setCategories]    = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [allTags,       setAllTags]       = useState([]);
   const [page,          setPage]          = useState(1);
   const [pages,         setPages]         = useState(1);
   const [total,         setTotal]         = useState(0);
@@ -80,7 +83,8 @@ export default function Products() {
   }
 
   useEffect(() => {
-    api.get('/admin/categories?all=1').then(d => { if (d.ok) setCategories(d.categories); });
+    api.get('/admin/categories?all=1').then(d => { if (d.ok) setCategories(d.categories); setLoadingCategories(false); });
+    api.get('/admin/tags').then(d => { if (d.ok) setAllTags(d.tags.map(t => t.name)); });
     load(1, sort);
   }, []);
 
@@ -96,21 +100,39 @@ export default function Products() {
     setForm({
       design_number: p.design_number || '',
       jewel_code:    p.jewel_code    || '',
-      category_id:   String(p.category_id || ''),
+      category_ids:  (p.categories && p.categories.length ? p.categories.map(c => String(c.id)) : [String(p.category_id || '')]).filter(Boolean),
       gross_weight:  p.gross_weight  || '',
       net_weight:    p.net_weight    || '',
       amount:        p.amount        || '',
       description:   p.description   || '',
       is_featured:   !!p.is_featured,
+      tags:          (p.tags || []).map(t => t.name).join(', '),
     });
     setEditId(p.id); setImageFile(null); setEditImageUrl(p.image_url || null); setModal(true);
   }
 
+  function toggleFormCategory(id) {
+    setForm(f => {
+      const ids = f.category_ids.includes(id) ? f.category_ids.filter(x => x !== id) : [...f.category_ids, id];
+      return { ...f, category_ids: ids };
+    });
+  }
+
   async function submit(e) {
     e.preventDefault();
+    if (!form.category_ids.length) return show('Select at least one category.', 'error');
     setSaving(true);
     const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => fd.append(k, k === 'is_featured' ? (v ? '1' : '0') : (v ?? '')));
+    fd.append('category_id', form.category_ids[0]);
+    form.category_ids.forEach(id => fd.append('category_ids', id));
+    fd.append('design_number', form.design_number);
+    fd.append('jewel_code',    form.jewel_code);
+    fd.append('gross_weight',  form.gross_weight);
+    fd.append('net_weight',    form.net_weight);
+    fd.append('amount',        form.amount ?? '');
+    fd.append('description',   form.description ?? '');
+    fd.append('is_featured',   form.is_featured ? '1' : '0');
+    fd.append('tags',          form.tags ?? '');
     if (imageFile) fd.append('image', imageFile);
     const d = editId
       ? await api.formPut(`/admin/products/${editId}`, fd)
@@ -269,8 +291,8 @@ export default function Products() {
             </select>
             {bulkAction === 'change_category' && (
               <select className="form-control form-control-sm" value={bulkCatId} onChange={e => setBulkCatId(e.target.value)}
-                      style={{ width: 'auto', minWidth: 160 }}>
-                <option value="">— Select category —</option>
+                      disabled={loadingCategories} style={{ width: 'auto', minWidth: 160 }}>
+                <option value="">{loadingCategories ? 'Loading categories…' : '— Select category —'}</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             )}
@@ -324,12 +346,12 @@ export default function Products() {
                   </td>
                   <td>
                     {p.image_url
-                      ? <img src={p.image_url} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'zoom-in' }} alt="" onClick={() => openImage(p.image_url)} />
+                      ? <img src={p.image_url} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'zoom-in' }} alt="" onClick={() => openImage(p.image_url)} onError={handleImgError} />
                       : '—'}
                   </td>
                   <td>{p.design_number}</td>
                   <td>{p.jewel_code}</td>
-                  <td>{p.category_name}</td>
+                  <td>{p.categories && p.categories.length ? p.categories.map(c => c.name).join(', ') : p.category_name}</td>
                   <td>{p.gross_weight ? parseFloat(p.gross_weight).toFixed(3) + 'g' : '—'}</td>
                   <td>{p.net_weight   ? parseFloat(p.net_weight).toFixed(3)   + 'g' : '—'}</td>
                   <td>
@@ -356,11 +378,17 @@ export default function Products() {
                     <td colSpan={9} style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         <div className="form-group" style={{ margin: 0, minWidth: 130 }}>
-                          <label style={{ fontSize: 11 }}>Category</label>
-                          <select className="form-control form-control-sm" value={qeForm.category_id} onChange={setQeF('category_id')}>
-                            <option value="">— select —</option>
+                          <label style={{ fontSize: 11 }}>Primary Category</label>
+                          <select className="form-control form-control-sm" value={qeForm.category_id} onChange={setQeF('category_id')}
+                                  disabled={loadingCategories}>
+                            <option value="">{loadingCategories ? 'Loading…' : '— select —'}</option>
                             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
+                          {p.categories && p.categories.length > 1 && (
+                            <p style={{ fontSize: 10, color: 'var(--mid)', marginTop: 2 }}>
+                              Also in: {p.categories.filter(c => String(c.id) !== qeForm.category_id).map(c => c.name).join(', ')} — use Edit for full category list.
+                            </p>
+                          )}
                         </div>
                         <div className="form-group" style={{ margin: 0, minWidth: 110 }}>
                           <label style={{ fontSize: 11 }}>Design No.</label>
@@ -402,14 +430,23 @@ export default function Products() {
             <h2>{editId ? 'Edit Product' : 'Add Product'}</h2>
             <form onSubmit={submit}>
               <div className="form-group">
-                <label>Category *</label>
-                <select className="form-control" required value={form.category_id} onChange={setF('category_id')}>
-                  <option value="">— Select category —</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                {categories.length === 0 && (
-                  <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 4 }}>No categories yet — add one in Categories first.</p>
-                )}
+                <label>Categories * <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(select one or more)</span></label>
+                <div className="category-picker">
+                  {loadingCategories ? (
+                    <p style={{ fontSize: 13, color: 'var(--mid)', padding: 8 }}><span className="spinner-dark" />Loading categories…</p>
+                  ) : categories.length === 0 ? (
+                    <p style={{ fontSize: 12, color: 'var(--mid)', padding: 8 }}>No categories yet — add one in Categories first.</p>
+                  ) : categories.map(c => {
+                    const id = String(c.id);
+                    const checked = form.category_ids.includes(id);
+                    return (
+                      <label key={c.id} className={`category-picker-item${checked ? ' checked' : ''}`}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleFormCategory(id)} />
+                        {c.name}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
               <div className="form-row-2">
                 <div className="form-group">
@@ -440,6 +477,17 @@ export default function Products() {
                 <textarea className="form-control" rows={2} value={form.description} onChange={setF('description')} />
               </div>
               <div className="form-group">
+                <label>Tags <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(comma separated — used for wholesaler catalogue filtering)</span></label>
+                <input
+                  className="form-control" value={form.tags} onChange={setF('tags')}
+                  placeholder="e.g. bridal, lightweight, new arrival"
+                  list="product-tag-suggestions"
+                />
+                <datalist id="product-tag-suggestions">
+                  {allTags.map(t => <option key={t} value={t} />)}
+                </datalist>
+              </div>
+              <div className="form-group">
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input
                     type="checkbox" checked={!!form.is_featured}
@@ -455,7 +503,7 @@ export default function Products() {
                   <img
                     src={editImageUrl} alt="Current"
                     style={{ width: 60, height: 60, objectFit: 'cover', borderRadius: 4, display: 'block', marginBottom: 8, cursor: 'zoom-in' }}
-                    onClick={() => openImage(editImageUrl)}
+                    onClick={() => openImage(editImageUrl)} onError={handleImgError}
                   />
                 )}
                 <input type="file" accept="image/*" onChange={e => setImageFile(e.target.files[0])} />

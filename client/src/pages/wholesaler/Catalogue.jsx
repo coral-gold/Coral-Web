@@ -1,15 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
 import WholesalerLayout from '../../components/WholesalerLayout';
 import Pagination from '../../components/Pagination';
+import CatalogImage from '../../components/CatalogImage';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/Toast';
 import { useLightbox } from '../../components/ImageLightbox';
+import { useSiteContent } from '../../context/SiteContentContext';
 import api from '../../api';
+
+const GRID_COLS_KEY = 'cg_wholesaler_grid_cols';
 
 function ProductCard({ product, inCart }) {
   const { add, setPanelOpen } = useCart();
   const { show } = useToast();
   const openImage = useLightbox();
+  const { settings } = useSiteContent();
   const [loading, setLoading] = useState(false);
 
   async function handleAdd() {
@@ -22,16 +27,23 @@ function ProductCard({ product, inCart }) {
 
   return (
     <div className={`product-card${inCart ? ' in-cart' : ''}`}>
-      {product.image
-        ? <img src={product.image} className="product-card-img" alt={product.designNo} loading="lazy" onClick={() => openImage(product.image)} style={{ cursor: 'zoom-in' }} />
-        : <div className="product-card-placeholder">💍</div>
-      }
+      <CatalogImage
+        src={product.image} alt={product.designNo} loading="lazy"
+        imgClassName="product-card-img" placeholderClassName="product-card-placeholder"
+        onClick={() => openImage(product.image)}
+      />
       <div className="product-card-body">
-        {/* Priority order: Net Weight (most prominent), Gross Weight, Amount */}
-        <div className="weight-primary">{product.netWeight}g <span>net wt.</span></div>
-        <div className="weight-secondary">{product.grossWeight}g gross wt.</div>
-        {product.amount && <div className="product-amount">Amount: {product.amount}</div>}
+        {/* Priority order: Net Weight (most prominent), Gross Weight, Amount —
+            each hideable site-wide from Admin > Settings > Field Visibility. */}
+        {settings.showNetWeight && <div className="weight-primary">{product.netWeight}g <span>net wt.</span></div>}
+        {settings.showGrossWeight && <div className="weight-secondary">{product.grossWeight}g gross wt.</div>}
+        {settings.showAmount && product.amount && <div className="product-amount">Amount: {product.amount}</div>}
         <div className="product-code">{product.designNo} &bull; {product.jewelCode}</div>
+        {product.tags && product.tags.length > 0 && (
+          <div className="product-tags">
+            {product.tags.slice(0, 3).map(t => <span key={t} className="product-tag-chip">{t}</span>)}
+          </div>
+        )}
         <button
           type="button" className="btn btn-primary btn-sm btn-add-cart"
           onClick={handleAdd} disabled={loading || inCart}
@@ -43,30 +55,45 @@ function ProductCard({ product, inCart }) {
   );
 }
 
+function readStoredCols() {
+  try {
+    const v = parseInt(localStorage.getItem(GRID_COLS_KEY), 10);
+    return [2, 3, 4].includes(v) ? v : 3;
+  } catch { return 3; }
+}
+
 export default function WholesalerCatalogue() {
   const { cart } = useCart();
   const [products,   setProducts]   = useState([]);
   const [categories, setCategories] = useState([]);
+  const [tags,        setTags]       = useState([]);
+  const [filtersLoading, setFiltersLoading] = useState(true);
   const [activeCat,  setActiveCat]  = useState('');
+  const [activeTag,  setActiveTag]  = useState('');
   const [search,     setSearch]     = useState('');
   const [page,       setPage]       = useState(1);
   const [pages,      setPages]      = useState(1);
   const [total,      setTotal]      = useState(0);
   const [loading,    setLoading]    = useState(false);
+  const [gridCols,   setGridCols]   = useState(readStoredCols);
   const debounce = useRef(null);
 
   useEffect(() => {
-    api.get('/catalogue/categories').then(d => { if (d.ok) setCategories(d.categories); });
+    Promise.all([
+      api.get('/catalogue/categories').then(d => { if (d.ok) setCategories(d.categories); }),
+      api.get('/catalogue/tags').then(d => { if (d.ok) setTags(d.tags); }),
+    ]).finally(() => setFiltersLoading(false));
   }, []);
 
   // Real server-side pagination — fetches and renders one page at a time,
   // same approach as the admin panel (Batch 15 item 3).
-  async function load(p, cat, s) {
+  async function load(p, cat, tag, s) {
     setLoading(true);
     try {
-      const d = await api.get(
-        `/catalogue?page=${p}&category=${encodeURIComponent(cat)}&search=${encodeURIComponent(s)}`
-      );
+      const params = new URLSearchParams({ page: p, search: s });
+      if (cat) params.set('category', cat);
+      if (tag) params.set('tag', tag);
+      const d = await api.get(`/catalogue?${params}`);
       if (d.ok) {
         setProducts(d.products);
         setPage(p);
@@ -76,19 +103,38 @@ export default function WholesalerCatalogue() {
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(1, activeCat, search); }, [activeCat]);
+  useEffect(() => { load(1, activeCat, activeTag, search); }, [activeCat, activeTag]);
   useEffect(() => {
     clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { load(1, activeCat, search); }, 350);
+    debounce.current = setTimeout(() => { load(1, activeCat, activeTag, search); }, 350);
   }, [search]);
+
+  function changeGridCols(n) {
+    setGridCols(n);
+    try { localStorage.setItem(GRID_COLS_KEY, String(n)); } catch {}
+  }
 
   const inCartIds = new Set(cart.lines.map(l => l.productId));
 
   return (
     <WholesalerLayout>
-      <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, color: 'var(--garnet)', marginBottom: 20 }}>
-        Catalogue
-      </h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <h1 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 26, color: 'var(--garnet)', margin: 0 }}>
+          Catalogue
+        </h1>
+        <div className="grid-cols-picker" role="group" aria-label="Grid view">
+          {[2, 3, 4].map(n => (
+            <button
+              key={n} type="button"
+              className={`grid-cols-btn${gridCols === n ? ' active' : ''}`}
+              onClick={() => changeGridCols(n)}
+              title={`${n} × ${n} grid`}
+            >
+              {n}×{n}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="search-bar">
         <input
@@ -99,19 +145,37 @@ export default function WholesalerCatalogue() {
       </div>
 
       <div className="catalogue-filters">
-        <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>All</button>
-        {categories.map(c => (
-          <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
-            {c}
-          </button>
-        ))}
+        {filtersLoading ? (
+          <span style={{ fontSize: 13, color: 'var(--mid)' }}><span className="spinner-dark" />Loading categories…</span>
+        ) : (
+          <>
+            <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>All</button>
+            {categories.map(c => (
+              <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
+                {c}
+              </button>
+            ))}
+          </>
+        )}
       </div>
 
-      {loading && products.length === 0 && (
-        <p style={{ color: 'var(--mid)' }}>Loading…</p>
+      {!filtersLoading && tags.length > 0 && (
+        <div className="catalogue-filters catalogue-tag-filters">
+          <span className="catalogue-filters-label">Tags:</span>
+          <button className={`filter-btn filter-btn-tag${activeTag === '' ? ' active' : ''}`} onClick={() => setActiveTag('')}>All</button>
+          {tags.map(t => (
+            <button key={t} className={`filter-btn filter-btn-tag${activeTag === t ? ' active' : ''}`} onClick={() => setActiveTag(t === activeTag ? '' : t)}>
+              {t}
+            </button>
+          ))}
+        </div>
       )}
 
-      <div className="product-grid">
+      {loading && products.length === 0 && (
+        <p style={{ color: 'var(--mid)' }}><span className="spinner-dark" />Loading…</p>
+      )}
+
+      <div className={`product-grid cols-${gridCols}`}>
         {products.map(p => (
           <ProductCard key={p.id} product={p} inCart={inCartIds.has(p.id)} />
         ))}
@@ -121,7 +185,7 @@ export default function WholesalerCatalogue() {
         <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products found.</p>
       )}
 
-      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, activeCat, search)} />
+      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, activeCat, activeTag, search)} />
     </WholesalerLayout>
   );
 }

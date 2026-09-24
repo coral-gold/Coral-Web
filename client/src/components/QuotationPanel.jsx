@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useToast } from './Toast';
 import { useLightbox } from './ImageLightbox';
+import CatalogImage from './CatalogImage';
+import { useSiteContent } from '../context/SiteContentContext';
 import api from '../api';
 
 function RemarkInput({ line, onSave }) {
@@ -33,6 +35,7 @@ export default function QuotationPanel() {
   const { cart, remark, remove, clear, panelOpen, setPanelOpen } = useCart();
   const { show } = useToast();
   const openImage = useLightbox();
+  const { settings } = useSiteContent();
   const [notes, setNotes]     = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -83,12 +86,17 @@ export default function QuotationPanel() {
           ) : (
             cart.lines.map(line => (
               <div key={line.cartId} className="panel-item">
-                {line.image
-                  ? <img src={line.image} className="panel-item-img" alt="" onClick={() => openImage(line.image)} style={{ cursor: 'zoom-in' }} />
-                  : <div className="panel-item-placeholder">💍</div>
-                }
+                <CatalogImage
+                  src={line.image} alt=""
+                  imgClassName="panel-item-img" placeholderClassName="panel-item-placeholder"
+                  onClick={() => openImage(line.image)}
+                />
                 <div className="panel-item-info">
-                  <div className="wt">{line.netWeight}g <small>net</small> &nbsp; {line.grossWeight}g <small>gross</small></div>
+                  <div className="wt">
+                    {settings.showNetWeight   && <>{line.netWeight}g <small>net</small></>}
+                    {settings.showNetWeight && settings.showGrossWeight && <>&nbsp;&nbsp;</>}
+                    {settings.showGrossWeight && <>{line.grossWeight}g <small>gross</small></>}
+                  </div>
                   <div className="code">{line.designNo} · {line.jewelCode}</div>
                   <RemarkInput line={line} onSave={remark} />
                 </div>
@@ -101,8 +109,8 @@ export default function QuotationPanel() {
         <div className="panel-footer">
           {cart.lines.length > 0 && (
             <div className="panel-summary">
-              <strong>{cart.itemCount}</strong> items &mdash; Total gross:{' '}
-              <strong>{totalGross.toFixed(3)}g</strong>
+              <strong>{cart.itemCount}</strong> items
+              {settings.showGrossWeight && <> &mdash; Total gross: <strong>{totalGross.toFixed(3)}g</strong></>}
             </div>
           )}
           <textarea

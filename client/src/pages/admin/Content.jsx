@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import AdminLayout from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
@@ -14,7 +15,6 @@ const FIELDS = [
 
 export default function Content() {
   const [form,     setForm]    = useState({});
-  const [logoFile, setLogoFile] = useState(null);
   const [saving,   setSaving]  = useState(false);
   const { show } = useToast();
 
@@ -25,15 +25,10 @@ export default function Content() {
   async function submit(e) {
     e.preventDefault();
     setSaving(true);
-    const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => { if (k !== 'site_logo') fd.append(k, v || ''); });
-    if (logoFile) fd.append('site_logo', logoFile);
-    const d = await api.form('/admin/content', fd);
+    const d = await api.post('/admin/content', form);
     setSaving(false);
-    if (d.ok) {
-      if (d.logo_url) setForm(f => ({ ...f, site_logo: d.logo_url }));
-      show('Content saved');
-    } else show(d.error || 'Failed', 'error');
+    if (d.ok) show('Content saved');
+    else show(d.error || 'Failed', 'error');
   }
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
@@ -56,23 +51,12 @@ export default function Content() {
           ))}
         </div>
 
-        <div className="admin-card" style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 16 }}>Logo</h3>
-          {form.site_logo && (
-            <div style={{ marginBottom: 12 }}>
-              <img src={form.site_logo} alt="Logo" style={{ height: 48, objectFit: 'contain', background: '#333', padding: 4 }} />
-              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--mid)', wordBreak: 'break-all' }}>
-                URL: <code>{/^https?:\/\//i.test(form.site_logo) ? form.site_logo : window.location.origin + form.site_logo}</code>
-              </div>
-            </div>
-          )}
-          <div className="form-group">
-            <label>Upload new logo (PNG/SVG recommended)</label>
-            <input type="file" accept="image/*" onChange={e => setLogoFile(e.target.files[0])} />
-          </div>
-        </div>
+        <p style={{ fontSize: 13, color: 'var(--mid)', margin: '12px 0' }}>
+          Looking for the logo, favicon, or other site-wide toggles? Those moved to{' '}
+          <Link to="/admin/settings" style={{ fontWeight: 600 }}>Settings</Link>.
+        </p>
 
-        <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginTop: 16 }}>
+        <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? <><span className="spinner" />Saving…</> : 'Save Changes'}
         </button>
       </form>

@@ -6,6 +6,7 @@ import { SiteContentProvider } from './context/SiteContentContext';
 import { ToastProvider } from './components/Toast';
 import { ImageLightboxProvider } from './components/ImageLightbox';
 import LoadingBar from './components/LoadingBar';
+import SiteLockGate from './components/SiteLockGate';
 
 import Home          from './pages/public/Home';
 import About         from './pages/public/About';
@@ -24,6 +25,7 @@ import Import        from './pages/admin/Import';
 import Parties       from './pages/admin/Parties';
 import AdminQuotations from './pages/admin/Quotations';
 import Content       from './pages/admin/Content';
+import SettingsPage  from './pages/admin/Settings';
 import Media         from './pages/admin/Media';
 import Setup         from './pages/Setup';
 
@@ -69,10 +71,10 @@ export default function App() {
               <Routes>
                 <Route path="/setup" element={<Setup />} />
 
-                <Route path="/"        element={<Home />} />
-                <Route path="/about"   element={<About />} />
-                <Route path="/catalog" element={<Catalog />} />
-                <Route path="/contact" element={<Contact />} />
+                <Route path="/"        element={<SiteLockGate><Home /></SiteLockGate>} />
+                <Route path="/about"   element={<SiteLockGate><About /></SiteLockGate>} />
+                <Route path="/catalog" element={<SiteLockGate><Catalog /></SiteLockGate>} />
+                <Route path="/contact" element={<SiteLockGate><Contact /></SiteLockGate>} />
 
                 <Route path="/wholesaler/login"     element={<WholesalerLogin />} />
                 <Route path="/wholesaler/catalogue" element={<PartyRoute><WholesalerCatalogue /></PartyRoute>} />
@@ -86,6 +88,7 @@ export default function App() {
                 <Route path="/admin/parties"        element={<AdminRoute><Parties /></AdminRoute>} />
                 <Route path="/admin/quotations"     element={<AdminRoute><AdminQuotations /></AdminRoute>} />
                 <Route path="/admin/content"        element={<AdminRoute><Content /></AdminRoute>} />
+                <Route path="/admin/settings"       element={<AdminRoute><SettingsPage /></AdminRoute>} />
                 <Route path="/admin/media"          element={<AdminRoute><Media /></AdminRoute>} />
 
                 <Route path="*" element={<Navigate to="/" replace />} />

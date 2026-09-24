@@ -40,6 +40,11 @@ router.post('/party/login', async (req, res) => {
     }
 
     try {
+        const [[wRow]] = await db.query("SELECT value FROM content WHERE key_name = 'wholesaler_enabled'").catch(() => [null]);
+        if (wRow?.value === '0') {
+            return res.json({ ok: false, error: 'The wholesaler ordering module is currently disabled.' });
+        }
+
         const [rows] = await db.query('SELECT * FROM parties WHERE party_id = ?', [partyId]);
         const party  = rows[0];
         if (!party || !await bcrypt.compare(password, party.password_hash)) {

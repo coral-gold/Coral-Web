@@ -23,8 +23,10 @@ export default function AdminQuotations() {
   const [total,      setTotal]      = useState(0);
   const [from,       setFrom]       = useState('');
   const [to,         setTo]         = useState('');
+  const [search,     setSearch]     = useState('');
   const [sort,       setSort]       = useState({ col: 'created_at', dir: 'desc' });
   const [loading,    setLoading]    = useState(false);
+  const debounce = React.useRef(null);
 
   // Real server-side pagination: fetch and render one page at a time.
   async function load(opts = {}) {
@@ -32,6 +34,7 @@ export default function AdminQuotations() {
     const p = opts.page || 1;
     const s = opts.sort || sort;
     const params = new URLSearchParams();
+    if (search) params.set('q', search);
     if (from) params.set('date_from', from);
     if (to)   params.set('date_to', to);
     params.set('page', p);
@@ -53,7 +56,14 @@ export default function AdminQuotations() {
     load({ page: 1, sort: newSort });
   }
 
-  useEffect(() => { load({ page: 1 }); }, []);
+  const mounted = React.useRef(false);
+  useEffect(() => { load({ page: 1 }); mounted.current = true; }, []);
+
+  useEffect(() => {
+    if (!mounted.current) return;
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => load({ page: 1 }), 350);
+  }, [search]);
 
   function openPdf(id, mode) {
     window.open(`/api/admin/quotations/${id}/pdf?mode=${mode}`, '_blank');
@@ -65,6 +75,13 @@ export default function AdminQuotations() {
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 16, flexWrap: 'wrap' }}>
         <div className="form-group" style={{ margin: 0 }}>
+          <label style={{ fontSize: 12 }}>Quotation No. / Party</label>
+          <input
+            type="search" className="form-control form-control-sm" placeholder="e.g. CG-Q-0001"
+            value={search} onChange={e => setSearch(e.target.value)} style={{ minWidth: 200 }}
+          />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
           <label style={{ fontSize: 12 }}>From</label>
           <input type="date" className="form-control form-control-sm" value={from} onChange={e => setFrom(e.target.value)} />
         </div>
@@ -73,7 +90,7 @@ export default function AdminQuotations() {
           <input type="date" className="form-control form-control-sm" value={to} onChange={e => setTo(e.target.value)} />
         </div>
         <button className="btn btn-primary btn-sm" onClick={() => load({ page: 1 })} disabled={loading}>Filter</button>
-        <button className="btn btn-outline btn-sm" onClick={() => { setFrom(''); setTo(''); setTimeout(() => load({ page: 1 }), 0); }}>Clear</button>
+        <button className="btn btn-outline btn-sm" onClick={() => { setFrom(''); setTo(''); setSearch(''); setTimeout(() => load({ page: 1 }), 0); }}>Clear</button>
       </div>
 
       {loading && <p style={{ color: 'var(--mid)' }}>Loading…</p>}

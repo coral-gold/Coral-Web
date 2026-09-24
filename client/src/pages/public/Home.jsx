@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/PublicLayout';
 import { useLightbox } from '../../components/ImageLightbox';
+import CatalogImage from '../../components/CatalogImage';
 import { useSiteContent } from '../../context/SiteContentContext';
 import api from '../../api';
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
-  const { content } = useSiteContent();
+  const { content, settings } = useSiteContent();
   const openImage = useLightbox();
 
   useEffect(() => {
@@ -28,9 +29,11 @@ export default function Home() {
           <p>{heroSubtitle}</p>
           <div className="hero-buttons">
             <Link to="/catalog" className="btn btn-gold">Browse Catalogue</Link>
-            <Link to="/wholesaler/login" className="btn btn-outline">
-              Wholesaler Login
-            </Link>
+            {settings.wholesalerEnabled && (
+              <Link to="/wholesaler/login" className="btn btn-outline">
+                Wholesaler Login
+              </Link>
+            )}
           </div>
         </div>
       </section>
@@ -71,10 +74,11 @@ export default function Home() {
             <div className="catalog-grid">
               {featured.map(p => (
                 <div key={p.id} className="pub-card">
-                  {p.image
-                    ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" onClick={() => openImage(p.image)} style={{ cursor: 'zoom-in' }} />
-                    : <div className="pub-card-img-placeholder">💍</div>
-                  }
+                  <CatalogImage
+                    src={p.image} alt={p.designNo} loading="lazy"
+                    imgClassName="pub-card-img" placeholderClassName="pub-card-img-placeholder"
+                    onClick={() => openImage(p.image)}
+                  />
                   <div className="pub-card-body">
                     <div className="design-no">{p.designNo}</div>
                     {p.description && <p>{p.description}</p>}

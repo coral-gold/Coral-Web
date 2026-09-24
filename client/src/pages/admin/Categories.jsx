@@ -29,6 +29,7 @@ export default function Categories() {
   const [mergeOpen,     setMergeOpen]     = useState(false);
   const [mergeTarget,   setMergeTarget]   = useState('');
   const [mergeSrcs,     setMergeSrcs]     = useState(new Set());
+  const [mergeLoading,  setMergeLoading]  = useState(false);
   const { show } = useToast();
 
   function handleSort(col) {
@@ -73,11 +74,13 @@ export default function Categories() {
 
   // Merge needs to see every category, not just the current page.
   async function openMerge() {
-    const d = await api.get('/admin/categories?all=1');
-    if (d.ok) setAllCategories(d.categories);
     setMergeTarget('');
     setMergeSrcs(new Set());
     setMergeOpen(true);
+    setMergeLoading(true);
+    const d = await api.get('/admin/categories?all=1');
+    setMergeLoading(false);
+    if (d.ok) setAllCategories(d.categories);
   }
 
   function toggleSrc(id) {
@@ -176,8 +179,8 @@ export default function Categories() {
             <form onSubmit={runMerge}>
               <div className="form-group">
                 <label>Keep (target) category</label>
-                <select className="form-control" required value={mergeTarget} onChange={e => setMergeTarget(e.target.value)}>
-                  <option value="">— Select target —</option>
+                <select className="form-control" required value={mergeTarget} onChange={e => setMergeTarget(e.target.value)} disabled={mergeLoading}>
+                  <option value="">{mergeLoading ? 'Loading categories…' : '— Select target —'}</option>
                   {allCategories.map(c => (
                     <option key={c.id} value={c.id}>{c.name} ({c.product_count} products)</option>
                   ))}
@@ -186,8 +189,9 @@ export default function Categories() {
 
               <div className="form-group">
                 <label>Merge these into it (tick to delete)</label>
-                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 6, padding: '8px 12px' }}>
-                  {allCategories
+                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 12px' }}>
+                  {mergeLoading && <p style={{ fontSize: 13, color: 'var(--mid)' }}><span className="spinner-dark" />Loading…</p>}
+                  {!mergeLoading && allCategories
                     .filter(c => String(c.id) !== String(mergeTarget))
                     .map(c => (
                       <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', cursor: 'pointer' }}>

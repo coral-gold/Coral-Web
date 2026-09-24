@@ -3,6 +3,7 @@ import AdminLayout from '../../components/AdminLayout';
 import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
 import { useLightbox } from '../../components/ImageLightbox';
+import { handleImgError } from '../../utils/image';
 import api from '../../api';
 
 function fmtSize(bytes) {
@@ -144,7 +145,7 @@ function LibraryTab() {
                 <td>
                   <img src={f.url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, display: 'block', cursor: 'zoom-in' }}
                        onClick={() => openImage(f.url)}
-                       onError={e => { e.target.style.display = 'none'; }} />
+                       onError={handleImgError} />
                 </td>
                 <td style={{ maxWidth: 200, wordBreak: 'break-all', fontSize: 12 }}>{f.filename}</td>
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtSize(f.size)}</td>

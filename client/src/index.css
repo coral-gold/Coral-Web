@@ -33,6 +33,7 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
+html, body { overflow-x: hidden; }
 body {
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 15px;
@@ -222,6 +223,30 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .search-bar input { flex: 1; }
 
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 20px; }
+/* Party's chosen grid density (Batch 18 item 5) — desktop/tablet only, see
+   the mobile breakpoints below for the safe fallback. */
+.product-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.product-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.product-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+.grid-cols-picker { display: inline-flex; border: 1.5px solid var(--border); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; }
+.grid-cols-btn {
+  border: none; background: none; padding: 5px 12px; border-radius: 999px; font-size: 12px;
+  font-weight: 600; color: var(--mid); cursor: pointer; transition: all .15s; font-family: inherit;
+}
+.grid-cols-btn:hover { color: var(--primary); }
+.grid-cols-btn.active { background: var(--primary); color: #fff; }
+
+.catalogue-tag-filters { margin-top: -10px; }
+.catalogue-filters-label { font-size: 12px; color: var(--mid); font-weight: 600; align-self: center; margin-right: 2px; }
+.filter-btn-tag { font-size: 12px; padding: 5px 14px; }
+.catalogue-filters .filter-btn-tag.active { background: var(--secondary); border-color: var(--secondary); }
+
+.product-tags { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.product-tag-chip {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+  background: var(--pink-pale); color: var(--secondary);
+}
 .product-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow);
@@ -324,7 +349,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   background: var(--pink-pale); border-left-color: var(--primary); color: var(--primary); text-decoration: none;
 }
 .admin-sidebar .nav-item.active { font-weight: 700; }
-.admin-main { padding: 28px 32px; }
+/* min-width: 0 overrides the grid item default of min-width: auto, which
+   would otherwise let a wide table's min-content size stretch this 1fr
+   track (and the whole page) past the viewport instead of scrolling inside
+   .table-wrap as intended — the classic CSS Grid overflow trap. */
+.admin-main { padding: 28px 32px; min-width: 0; }
 .admin-main h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 22px; }
 
 .admin-card {
@@ -402,7 +431,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 @media (max-width: 900px) {
   .admin-layout { grid-template-columns: 1fr; }
   .admin-sidebar { display: none; }
-  .admin-header-nav { display: none; }
+  /* .admin-header nav (base rule, specificity 0,1,1) would otherwise beat a
+     plain .admin-header-nav here (0,1,0) and stay display:flex on mobile —
+     match its specificity so this actually hides it. */
+  .admin-header .admin-header-nav { display: none; }
   .admin-mobile-nav { display: block; }
   .admin-header .container { height: 52px; }
   .contact-grid { grid-template-columns: 1fr; }
@@ -440,7 +472,13 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 @media (max-width: 600px) {
   .hero h1 { font-size: 30px; }
   .hero p { font-size: 15px; }
-  .product-grid { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; }
+  /* The party's grid-density preference (2×2/3×3/4×4) is a desktop
+     convenience — mobile always falls back to a safe auto-fill so a 4×4
+     pick never crushes cards into unreadable slivers on a phone. */
+  .product-grid,
+  .product-grid.cols-2, .product-grid.cols-3, .product-grid.cols-4 {
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px;
+  }
   .quot-panel { width: 100%; right: -100%; }
   .quot-panel.open { right: 0; }
   .site-header nav { gap: 10px; }
@@ -459,7 +497,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 @media (max-width: 480px) {
   .catalog-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
-  .product-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .product-grid,
+  .product-grid.cols-2, .product-grid.cols-3, .product-grid.cols-4 {
+    grid-template-columns: 1fr 1fr; gap: 10px;
+  }
   .product-card-body { padding: 10px; }
   .weight-primary { font-size: 18px; }
   .btn-add-cart { font-size: 12px; padding: 8px 6px; }
@@ -471,7 +512,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 
 @media (max-width: 400px) {
-  .catalog-grid, .product-grid { grid-template-columns: 1fr 1fr; }
+  .catalog-grid, .product-grid,
+  .product-grid.cols-2, .product-grid.cols-3, .product-grid.cols-4 {
+    grid-template-columns: 1fr 1fr;
+  }
   .hero-buttons { flex-direction: column; align-items: center; }
 }
 
@@ -487,7 +531,39 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   border: 2px solid rgba(255,255,255,.35); border-top-color: currentColor;
   border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px;
 }
+/* Same spinner, but with a visible track for use on light backgrounds
+   (outside a colored button) — dropdowns/pickers loading state. */
+.spinner-dark {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--secondary);
+  border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Category/tag multi-select picker — Add/Edit Product */
+.category-picker {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  max-height: 160px; overflow-y: auto;
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  padding: 10px; background: var(--surface);
+}
+.category-picker-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 999px; border: 1.5px solid var(--border);
+  font-size: 13px; cursor: pointer; user-select: none;
+  background: var(--off-white); color: var(--near-black);
+  transition: all .15s;
+}
+.category-picker-item:hover { border-color: var(--secondary); }
+.category-picker-item.checked {
+  background: var(--pink-pale); border-color: var(--secondary); color: var(--primary); font-weight: 600;
+}
+.category-picker-item input[type="checkbox"] { accent-color: var(--primary); width: 14px; height: 14px; }
+
+/* Select loading/disabled state — used while a category list is still fetching */
+select.form-control:disabled, select.form-control-sm:disabled {
+  background: var(--off-white); color: var(--mid); cursor: wait; opacity: .8;
+}
 
 /* Toast */
 .toast {
