@@ -36,7 +36,7 @@ function drawPageFooter(doc, quotation) {
 }
 
 // ── Shared header (brand mark + party/quotation meta) ────────────────────────
-function drawHeader(doc, quotation, party, withImages) {
+function drawHeader(doc, quotation, party) {
     doc.fontSize(22).font('Helvetica-Bold').fillColor(PRIMARY)
        .text('CORAL GOLD', L, MARGIN, { width: W, align: 'center', characterSpacing: 1.5 });
     doc.moveDown(0.2);
@@ -57,10 +57,8 @@ function drawHeader(doc, quotation, party, withImages) {
        .text(quotation.quotation_number, L, metaY, { width: W, align: 'right' });
     doc.fontSize(9).font('Helvetica').fillColor(MID)
        .text('QUOTATION', L, metaY + 24, { width: W, align: 'right' });
-    if (withImages) {
-        doc.fontSize(8).fillColor(MID)
-           .text('WITH PRODUCT IMAGES', L, metaY + 36, { width: W, align: 'right' });
-    }
+    doc.fontSize(8).fillColor(MID)
+       .text('WITH PRODUCT IMAGES', L, metaY + 36, { width: W, align: 'right' });
 
     return metaY + 68;
 }
@@ -97,52 +95,6 @@ function drawTotalsAndNotes(doc, quotation, items, y, fields) {
         doc.fontSize(9).font('Helvetica-Oblique').fillColor(MID)
            .text(`Notes: ${quotation.notes}`, L, y, { width: W });
     }
-}
-
-// ── List layout (no images) ──────────────────────────────────────────────────
-function drawListHeader(doc, y) {
-    const ROW = 20;
-    const cols = [L, L+90, L+195, L+280, L+365, L+W];
-    const heads = ['Design No.', 'Jewel Code', 'Gross Wt.', 'Net Wt.', 'Remark'];
-
-    doc.roundedRect(L, y, W, ROW, 3).fillColor(PRIMARY).fill();
-    doc.fontSize(8.5).font('Helvetica-Bold').fillColor('#ffffff');
-    heads.forEach((h, i) => {
-        doc.text(h, cols[i] + 4, y + 6, { width: cols[i + 1] - cols[i] - 6, lineBreak: false });
-    });
-    return { y: y + ROW, cols };
-}
-
-function drawListBody(doc, quotation, items, startY, fields) {
-    const ROW_H = 24;
-    let { y, cols } = drawListHeader(doc, startY);
-
-    items.forEach((it, idx) => {
-        if (y + ROW_H > SAFE_BOT) {
-            drawPageFooter(doc, quotation);
-            doc.addPage();
-            ({ y, cols } = drawListHeader(doc, MARGIN));
-        }
-        if (idx % 2 === 1) {
-            doc.rect(L, y, W, ROW_H).fillColor(PINK_PALE).fill();
-        }
-
-        const cellY = y + 6;
-        doc.fontSize(8.5).fillColor(NEAR_BLACK);
-        doc.font('Helvetica').text(it.design_number || '—', cols[0] + 4, cellY, { width: cols[1]-cols[0]-6, lineBreak: false });
-        doc.font('Helvetica').text(it.jewel_code    || '—', cols[1] + 4, cellY, { width: cols[2]-cols[1]-6, lineBreak: false });
-        doc.font('Helvetica-Bold').fillColor(PRIMARY)
-           .text(fields.showGrossWeight ? fmtW(it.gross_weight) + 'g' : '—', cols[2] + 4, cellY, { width: cols[3]-cols[2]-6, lineBreak: false });
-        doc.font('Helvetica').fillColor(NEAR_BLACK)
-           .text(fields.showNetWeight ? fmtW(it.net_weight) + 'g' : '—', cols[3] + 4, cellY, { width: cols[4]-cols[3]-6, lineBreak: false });
-        if (it.remark) {
-            doc.font('Helvetica-Oblique').fillColor(MID)
-               .text(it.remark, cols[4] + 4, y + 4, { width: cols[5]-cols[4]-6, height: ROW_H - 6, ellipsis: true });
-        }
-        y += ROW_H;
-    });
-
-    drawTotalsAndNotes(doc, quotation, items, y, fields);
 }
 
 // ── Grid layout (image-forward, catalog-style cards) ─────────────────────────
@@ -215,17 +167,16 @@ function drawGridBody(doc, quotation, items, startY, cols, imageBuffers, fields)
 }
 
 // ── Main generator ────────────────────────────────────────────────────────────
-// options.layout: 'grid2' | 'grid3' | 'list' — the admin Settings choice.
-// A 'list' layout (or no images requested at all) always renders the plain
-// table, regardless of withImages; grid2/grid3 only apply when withImages.
+// options.layout: 'grid2' | 'grid3' — the admin Settings choice. Quotation
+// PDFs always render with product images (Batch 20 item 1) — there is no
+// text-only option any more.
 async function generateQuotationPDF(quotation, party, items, options = {}) {
-    const { withImages = false, itemImages = {}, layout = 'grid2' } = options;
+    const { itemImages = {}, layout = 'grid2' } = options;
     const fields = {
         showGrossWeight: options.showGrossWeight !== false,
         showNetWeight:   options.showNetWeight   !== false,
         showAmount:      options.showAmount      !== false,
     };
-    const useGrid = withImages && layout !== 'list';
     const gridCols = layout === 'grid3' ? 3 : 2;
 
     // Pre-fetch every needed image as a Buffer before drawing starts — PDFKit's
@@ -234,12 +185,10 @@ async function generateQuotationPDF(quotation, party, items, options = {}) {
     // that item's buffer undefined — drawGridBody renders a placeholder swatch
     // for it instead of erroring.
     const imageBuffers = {};
-    if (useGrid) {
-        for (const it of items) {
-            const key = itemImages[it.product_id];
-            if (key && imageBuffers[it.product_id] === undefined) {
-                imageBuffers[it.product_id] = await storage.getBuffer(key).catch(() => null);
-            }
+    for (const it of items) {
+        const key = itemImages[it.product_id];
+        if (key && imageBuffers[it.product_id] === undefined) {
+            imageBuffers[it.product_id] = await storage.getBuffer(key).catch(() => null);
         }
     }
 
@@ -250,13 +199,8 @@ async function generateQuotationPDF(quotation, party, items, options = {}) {
         doc.on('end',   () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        const bodyStartY = drawHeader(doc, quotation, party, useGrid);
-
-        if (useGrid) {
-            drawGridBody(doc, quotation, items, bodyStartY, gridCols, imageBuffers, fields);
-        } else {
-            drawListBody(doc, quotation, items, bodyStartY, fields);
-        }
+        const bodyStartY = drawHeader(doc, quotation, party);
+        drawGridBody(doc, quotation, items, bodyStartY, gridCols, imageBuffers, fields);
 
         drawPageFooter(doc, quotation);
         doc.end();

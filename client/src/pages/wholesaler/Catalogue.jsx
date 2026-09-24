@@ -83,6 +83,7 @@ export default function WholesalerCatalogue() {
   const [total,      setTotal]      = useState(0);
   const [loading,    setLoading]    = useState(false);
   const [gridCols,   setGridCols]   = useState(readStoredCols);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const debounce = useRef(null);
 
   useEffect(() => {
@@ -124,6 +125,7 @@ export default function WholesalerCatalogue() {
   }
 
   const inCartIds = new Set(cart.lines.map(l => l.productId));
+  const activeFilterCount = (activeCat ? 1 : 0) + (activeTag ? 1 : 0) + (netMin !== '' || netMax !== '' ? 1 : 0);
 
   return (
     <WholesalerLayout wide>
@@ -151,52 +153,72 @@ export default function WholesalerCatalogue() {
           placeholder="Search by design no. or jewel code…"
           value={search} onChange={e => setSearch(e.target.value)}
         />
+        {/* Category/Tag/weight-range stay hidden until opened — most visits
+            don't need them, and keeping them collapsed by default declutters
+            the catalogue on both mobile and desktop (item 3). */}
+        <button
+          type="button"
+          className={`btn btn-outline filter-toggle-btn${filtersOpen ? ' active' : ''}`}
+          onClick={() => setFiltersOpen(o => !o)}
+          aria-expanded={filtersOpen}
+        >
+          Filter
+          {activeFilterCount > 0 && <span className="filter-count-badge">{activeFilterCount}</span>}
+        </button>
       </div>
 
-      {settings.showNetWeight && (
-        <div className="weight-range-filter">
-          <span className="catalogue-filters-label">Net Wt. (g):</span>
-          <input
-            type="number" min="0" step="0.1" className="form-control form-control-sm"
-            placeholder="Min" value={netMin} onChange={e => setNetMin(e.target.value)}
-          />
-          <span className="weight-range-sep">–</span>
-          <input
-            type="number" min="0" step="0.1" className="form-control form-control-sm"
-            placeholder="Max" value={netMax} onChange={e => setNetMax(e.target.value)}
-          />
-          {(netMin !== '' || netMax !== '') && (
-            <button type="button" className="btn-link-clear" onClick={() => { setNetMin(''); setNetMax(''); }}>
-              Clear
-            </button>
+      {filtersOpen && (
+        <div className="catalogue-filters-panel">
+          {settings.showNetWeight && (
+            <div className="weight-range-filter">
+              <span className="catalogue-filters-label">Net Wt. (g):</span>
+              <input
+                type="number" min="0" step="0.1" className="form-control form-control-sm"
+                placeholder="Min" value={netMin} onChange={e => setNetMin(e.target.value)}
+              />
+              <span className="weight-range-sep">–</span>
+              <input
+                type="number" min="0" step="0.1" className="form-control form-control-sm"
+                placeholder="Max" value={netMax} onChange={e => setNetMax(e.target.value)}
+              />
+              {(netMin !== '' || netMax !== '') && (
+                <button type="button" className="btn-link-clear" onClick={() => { setNetMin(''); setNetMax(''); }}>
+                  Clear
+                </button>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      <div className="catalogue-filters">
-        {filtersLoading ? (
-          <span style={{ fontSize: 13, color: 'var(--mid)' }}><span className="spinner-dark" />Loading categories…</span>
-        ) : (
-          <>
-            <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>All</button>
-            {categories.map(c => (
-              <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
-                {c}
-              </button>
-            ))}
-          </>
-        )}
-      </div>
+          <div className="catalogue-filters">
+            {filtersLoading ? (
+              <span style={{ fontSize: 13, color: 'var(--mid)' }}><span className="spinner-dark" />Loading categories…</span>
+            ) : (
+              <>
+                <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>All</button>
+                {categories.map(c => (
+                  <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
+                    {c}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
 
-      {!filtersLoading && tags.length > 0 && (
-        <div className="catalogue-filters catalogue-tag-filters">
-          <span className="catalogue-filters-label">Tags:</span>
-          <button className={`filter-btn filter-btn-tag${activeTag === '' ? ' active' : ''}`} onClick={() => setActiveTag('')}>All</button>
-          {tags.map(t => (
-            <button key={t} className={`filter-btn filter-btn-tag${activeTag === t ? ' active' : ''}`} onClick={() => setActiveTag(t === activeTag ? '' : t)}>
-              {t}
-            </button>
-          ))}
+          {!filtersLoading && tags.length > 0 && (
+            <div className="catalogue-filters catalogue-tag-filters">
+              <span className="catalogue-filters-label">Tags:</span>
+              <button className={`filter-btn filter-btn-tag${activeTag === '' ? ' active' : ''}`} onClick={() => setActiveTag('')}>All</button>
+              {tags.map(t => (
+                <button key={t} className={`filter-btn filter-btn-tag${activeTag === t ? ' active' : ''}`} onClick={() => setActiveTag(t === activeTag ? '' : t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button type="button" className="btn btn-primary btn-sm filter-panel-apply" onClick={() => setFiltersOpen(false)}>
+            Apply Filters
+          </button>
         </div>
       )}
 

@@ -84,9 +84,9 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/quotation/:id/pdf?mode=text|images
+// GET /api/quotation/:id/pdf — always includes product images (Batch 20
+// item 1); the earlier text-only/with-images request choice is gone.
 router.get('/:id/pdf', async (req, res) => {
-    const withImages = req.query.mode === 'images';
     try {
         const [[q]] = await db.query(
             'SELECT * FROM quotations WHERE id = ? AND party_id = ?',
@@ -99,28 +99,24 @@ router.get('/:id/pdf', async (req, res) => {
             'SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id', [q.id]
         );
 
-        // If with-images mode, fetch current image_path for each product
         let itemImages = {};
-        if (withImages) {
-            const productIds = items.map(i => i.product_id).filter(Boolean);
-            if (productIds.length) {
-                const placeholders = productIds.map(() => '?').join(',');
-                const [imgRows] = await db.query(
-                    `SELECT id, image_path FROM products WHERE id IN (${placeholders})`,
-                    productIds
-                );
-                for (const r of imgRows) {
-                    if (r.image_path) itemImages[r.id] = r.image_path;
-                }
+        const productIds = items.map(i => i.product_id).filter(Boolean);
+        if (productIds.length) {
+            const placeholders = productIds.map(() => '?').join(',');
+            const [imgRows] = await db.query(
+                `SELECT id, image_path FROM products WHERE id IN (${placeholders})`,
+                productIds
+            );
+            for (const r of imgRows) {
+                if (r.image_path) itemImages[r.id] = r.image_path;
             }
         }
 
         const pdfSettings = await getPdfSettings();
-        const pdfBuffer = await generateQuotationPDF(q, party, items, { withImages, itemImages, ...pdfSettings });
-        const suffix = withImages ? '-with-images' : '';
+        const pdfBuffer = await generateQuotationPDF(q, party, items, { withImages: true, itemImages, ...pdfSettings });
         res.set({
             'Content-Type':        'application/pdf',
-            'Content-Disposition': `inline; filename="${q.quotation_number}${suffix}.pdf"`,
+            'Content-Disposition': `inline; filename="${q.quotation_number}.pdf"`,
             'Content-Length':      pdfBuffer.length,
         });
         res.end(pdfBuffer);

@@ -32,6 +32,10 @@
   --shadow:      0 2px 14px rgba(109,7,60,.08);
   --shadow-md:   0 6px 24px rgba(109,7,60,.12);
   --shadow-lg:   0 12px 40px rgba(109,7,60,.16);
+
+  /* Admin-configurable (Settings > product card image fit); overridden
+     inline on <html> by SiteContentContext once settings load (item 8). */
+  --product-image-fit: cover;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -163,7 +167,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   transition: transform .2s, box-shadow .2s;
 }
 .pub-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-.pub-card-img { width: 100%; height: 210px; object-fit: cover; }
+.pub-card-img { width: 100%; height: 210px; object-fit: var(--product-image-fit, cover); }
 .pub-card-img-placeholder {
   width: 100%; height: 210px; background: var(--pink-pale);
   display: flex; align-items: center; justify-content: center; font-size: 44px;
@@ -229,6 +233,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
 .search-bar input { flex: 1; }
 
+/* Category/Tag/weight-range filters collapse behind this button by default
+   (item 3) — most visits don't need them, so they stay out of the way
+   until asked for. */
+.filter-toggle-btn { display: flex; align-items: center; gap: 6px; white-space: nowrap; flex-shrink: 0; }
+.filter-toggle-btn.active { background: var(--primary); color: #fff; }
+.filter-count-badge {
+  background: var(--primary); color: #fff; border-radius: 999px; min-width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; padding: 0 5px;
+}
+.filter-toggle-btn.active .filter-count-badge { background: #fff; color: var(--primary); }
+.catalogue-filters-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 16px 18px; margin-bottom: 20px;
+}
+.filter-panel-apply { display: block; margin-top: 4px; }
+
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 20px; }
 /* Party's chosen grid density (Batch 18 item 5) — desktop/tablet only, see
    the mobile breakpoints below for the safe fallback. */
@@ -269,7 +289,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   transition: transform .2s, box-shadow .2s;
 }
 .product-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
-.product-card-img { width: 100%; height: 180px; object-fit: cover; }
+.product-card-img { width: 100%; height: 180px; object-fit: var(--product-image-fit, cover); }
 .product-card-placeholder {
   width: 100%; height: 180px; background: var(--pink-pale);
   display: flex; align-items: center; justify-content: center; font-size: 36px;
@@ -332,15 +352,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .btn-generate-quotation:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 6px 18px rgba(109,7,60,.38); }
 .btn-generate-quotation:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
 
-/* Sticky bar, always visible while browsing the catalogue (item 6) */
+/* Floating rounded CTA, always visible while browsing the catalogue (item
+   6) — a full-bleed bar reads as page chrome (like a footer) rather than a
+   distinct action, so this floats clear of the edges as a pill instead,
+   in the brand primary color, to stand out immediately (Batch 20 item 4). */
 .sticky-quotation-bar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 500;
-  display: flex; align-items: center; justify-content: center; gap: 10px;
+  position: fixed; right: 24px; bottom: 24px; z-index: 500;
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   background: var(--primary); color: #fff !important; text-decoration: none !important;
-  padding: 16px 24px; font-size: 15px; font-weight: 700; font-family: inherit;
-  box-shadow: 0 -4px 20px rgba(109,7,60,.25); transition: background .15s;
+  padding: 15px 28px; font-size: 15px; font-weight: 700; font-family: inherit;
+  border-radius: 999px; box-shadow: 0 6px 20px rgba(109,7,60,.4);
+  transition: background .15s, transform .15s, box-shadow .15s;
 }
-.sticky-quotation-bar:hover { background: var(--primary-hover); }
+.sticky-quotation-bar:hover {
+  background: var(--primary-hover); transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(109,7,60,.48);
+}
 .sticky-quotation-icon { font-size: 18px; }
 .sticky-quotation-count {
   background: #fff; color: var(--primary); border-radius: 999px;
@@ -349,10 +376,20 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 
 /* ═══════════════ ADMIN ═══════════════ */
-.section-admin { background: var(--off-white); }
+/* Flex "app shell": the shell itself is pinned to the viewport height and
+   never scrolls (position: sticky broke here — html/body both need
+   overflow-x: hidden site-wide for the public pages, and that alone turns
+   body into an implicit scroll container, which starves .admin-sidebar's
+   sticky positioning of the viewport-level scroll it needs. A fixed-height
+   flex column with its own scrolling region sidesteps that entirely). */
+.section-admin {
+  background: var(--off-white);
+  height: 100vh; height: 100dvh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
 
 .admin-header {
-  background: #FFFFFF; position: sticky; top: 0; z-index: 100;
+  background: #FFFFFF; flex-shrink: 0; z-index: 100;
   box-shadow: 0 1px 0 var(--border);
 }
 .admin-header .container { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 12px; }
@@ -382,12 +419,13 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   font-size: 22px; margin-bottom: 24px; color: var(--primary); font-weight: 700;
 }
 
-.admin-layout { display: grid; grid-template-columns: 208px 1fr; min-height: calc(100vh - 60px); }
-/* Sticky, not just a tall column — stays in view while .admin-main scrolls
-   past it, rather than scrolling away with the rest of the page (item 7). */
+/* The shell's remaining height after the fixed header/mobile-nav, split
+   into a fixed-width sidebar and a flexible content column — each scrolls
+   independently, the sidebar never moves (item 2). */
+.admin-layout { display: flex; flex: 1; min-height: 0; }
 .admin-sidebar {
   background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0;
-  position: sticky; top: 60px; height: calc(100vh - 60px); overflow-y: auto; align-self: start;
+  flex-shrink: 0; width: 208px; overflow-y: auto;
 }
 .admin-sidebar .nav-item {
   display: block; padding: 10px 20px; color: #6B5560; font-size: 13px; font-weight: 500;
@@ -397,11 +435,12 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   background: var(--pink-pale); border-left-color: var(--primary); color: var(--primary); text-decoration: none;
 }
 .admin-sidebar .nav-item.active { font-weight: 700; }
-/* min-width: 0 overrides the grid item default of min-width: auto, which
-   would otherwise let a wide table's min-content size stretch this 1fr
-   track (and the whole page) past the viewport instead of scrolling inside
-   .table-wrap as intended — the classic CSS Grid overflow trap. */
-.admin-main { padding: 28px 32px; min-width: 0; }
+/* min-width: 0 overrides the flex item default of min-width: auto, which
+   would otherwise let a wide table's min-content size stretch this flex
+   track (and the whole shell) past the viewport instead of scrolling inside
+   .table-wrap as intended — the classic flexbox overflow trap. This is the
+   pane that actually scrolls; the sidebar beside it never does (item 2). */
+.admin-main { padding: 28px 32px; flex: 1; min-width: 0; overflow-y: auto; }
 .admin-main h1 { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 22px; }
 
 .admin-card {
@@ -465,11 +504,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 /* ── Admin mobile nav ── */
 /* The sidebar's main-section links, rendered as a horizontally-scrollable
    bar instead of a fixed column below ~900px — same nav, not a second one.
-   Sticky right under the header so it (and the header) stay in view while
-   only .admin-main scrolls underneath (item 7). */
+   It's chrome inside the flex app-shell (flex-shrink: 0, like the header),
+   so it stays put while only .admin-main scrolls underneath (item 7). */
 .admin-mobile-nav {
   display: none;
-  position: sticky; top: 52px; z-index: 99;
+  flex-shrink: 0; z-index: 99;
   overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch;
   background: #FFFFFF; border-bottom: 1px solid var(--border);
   padding: 0 12px; scrollbar-width: none;
@@ -485,13 +524,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
-  .admin-layout { grid-template-columns: 1fr; }
   .admin-sidebar { display: none; }
   .admin-mobile-nav { display: block; }
   .admin-header .container { height: 52px; }
   /* Scroll sideways instead of wrapping to a second line — keeps the header
-     a predictable, fixed height so .admin-mobile-nav's sticky offset below
-     it never has to guess at a taller wrapped header (item 7/8). */
+     a predictable, fixed height within the flex app-shell (item 7/8). */
   .admin-header nav {
     flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
     scrollbar-width: none; max-width: 60vw;
@@ -556,6 +593,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .quot-panel.open { right: 0; }
   .site-header nav { gap: 10px; }
   .cart-badge { padding: 5px 10px; font-size: 12px; }
+  .sticky-quotation-bar { right: 14px; bottom: 14px; padding: 13px 20px; font-size: 14px; }
 
   /* Login boxes */
   .login-box { padding: 28px 20px; }

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import api from '../api';
 
-const DEFAULT_SETTINGS = { wholesalerEnabled: true, siteLockEnabled: false, showNetWeight: true, showGrossWeight: true, showAmount: true };
+const DEFAULT_SETTINGS = { wholesalerEnabled: true, siteLockEnabled: false, showNetWeight: true, showGrossWeight: true, showAmount: true, productImageFit: 'cover' };
 
 const SiteContentCtx = createContext({ content: {}, settings: DEFAULT_SETTINGS, logoUrl: '/logo.png', locked: false, loaded: false, recheckLock: () => {} });
 
@@ -25,6 +25,14 @@ export function SiteContentProvider({ children }) {
   }
 
   useEffect(() => { load().finally(() => setLoaded(true)); }, []);
+
+  // Applied as a CSS custom property so every product card image site-wide
+  // (public preview, wholesaler catalogue, quotation panel) picks it up
+  // through one shared CSS rule instead of each component wiring its own
+  // inline style (item 8).
+  useEffect(() => {
+    document.documentElement.style.setProperty('--product-image-fit', settings.productImageFit || 'cover');
+  }, [settings.productImageFit]);
 
   // Admin can upload a custom logo (Admin > Settings); fall back to the
   // default brand asset when none has been set.

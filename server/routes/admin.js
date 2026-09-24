@@ -498,11 +498,6 @@ const FIELD_ALIASES = {
     'descr':          'description',
     'description':    'description',
     'remark':         'description',
-    'image path':     'image_path',
-    'imagepath':      'image_path',
-    'image':          'image_path',
-    'img path':       'image_path',
-    'photo':          'image_path',
 };
 
 // Temp store for parsed Excel data (cleared after 30 min)
@@ -615,7 +610,7 @@ router.post('/import/run', async (req, res) => {
 
     if (data.length < 2) {
         const jobId = require('crypto').randomUUID();
-        jobs.set(jobId, { status: 'done', progress: { done: 0, total: 0, step: 'Complete' }, result: { inserted: 0, updated: 0, skipped: 0, errors: [], imageMap: [] }, error: null, startedAt: Date.now() });
+        jobs.set(jobId, { status: 'done', progress: { done: 0, total: 0, step: 'Complete' }, result: { inserted: 0, updated: 0, skipped: 0, errors: [] }, error: null, startedAt: Date.now() });
         return res.json({ ok: true, jobId });
     }
 
@@ -655,7 +650,6 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
 
     let inserted = 0, updated = 0, skipped = 0;
     const errors     = [];
-    const imageMap   = [];
     const catCache   = {};
     const seenInFile = new Set();
 
@@ -674,16 +668,6 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
         const netWt       = col.net_weight   !== undefined ? parseFloat(row[col.net_weight])   || null : null;
         const descr       = col.description  !== undefined ? String(row[col.description]  ?? '').trim() || null : null;
         const amountVal   = col.amount       !== undefined ? String(row[col.amount]       ?? '').trim() || null : null;
-
-        if (!seenInFile.has(styleKey)) {
-            const imgEntry = { jewel_code: jewelCode, design_number: finalDesign };
-            if (col.image_path !== undefined) {
-                const rawPath = String(row[col.image_path] ?? '').trim();
-                const fn = extractImageFilename(rawPath);
-                if (fn) imgEntry.filename = fn;
-            }
-            imageMap.push(imgEntry);
-        }
 
         if (seenInFile.has(styleKey)) { skipped++; continue; }
         seenInFile.add(styleKey);
@@ -782,25 +766,14 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
 
     job.status   = 'done';
     job.progress = { done: totalRows, total: totalRows, step: 'Complete' };
-    job.result   = { inserted, updated, skipped, errors, imageMap };
+    job.result   = { inserted, updated, skipped, errors };
 }
 
-// Extract the first filename from an ERP image path like \SavedImage\BG\BG0245.jpeg
-function extractImageFilename(pathValue) {
-    if (!pathValue) return null;
-    const str = String(pathValue).trim();
-    // Match the last component of the first \Folder\Filename.ext pattern
-    const match = str.match(/\\[^\\]+\\([^\\]+\.[a-zA-Z0-9]+)/);
-    if (match) return match[1];
-    // Fallback: just get the last path component with an extension
-    const parts = str.split(/[\\\/]/);
-    const last  = parts.filter(Boolean).pop();
-    return (last && /\.[a-zA-Z0-9]+$/.test(last)) ? last : null;
-}
-
-// Step 3 (optional): Upload individual product image, match by design_number.
-// Send force=1 to overwrite an existing image (used by standalone Bulk Image Import).
-// Without force, only attaches if product currently has no image (Excel import behavior).
+// Upload individual product images, matched by design_number — the Media
+// Library's standalone Bulk Image Import (Batch 19 item 4). The Excel
+// product-data import no longer touches images at all (Batch 20 item 7).
+// Send force=1 to overwrite an existing image; without it, only attaches
+// when the product currently has no image.
 router.post('/import/images', imageUpload.single('image'), async (req, res) => {
     const { design_number, force } = req.body;
     if (!design_number || !req.file) return res.json({ ok: false, error: 'design_number and image required.' });
@@ -967,8 +940,9 @@ router.get('/quotations/:id', async (req, res) => {
     res.json({ ok: true, quotation: q, items });
 });
 
+// Always includes product images (Batch 20 item 1) — the earlier
+// text-only/with-images request choice is gone.
 router.get('/quotations/:id/pdf', async (req, res) => {
-    const withImages = req.query.mode === 'images';
     try {
         const [[q]] = await db.query(
             'SELECT q.*, p.company_name, p.party_id, p.phone FROM quotations q JOIN parties p ON p.id=q.party_id WHERE q.id=?',
@@ -978,19 +952,16 @@ router.get('/quotations/:id/pdf', async (req, res) => {
         const [items] = await db.query('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id', [q.id]);
 
         let itemImages = {};
-        if (withImages) {
-            const productIds = items.map(i => i.product_id).filter(Boolean);
-            if (productIds.length) {
-                const ph = productIds.map(() => '?').join(',');
-                const [imgRows] = await db.query(`SELECT id, image_path FROM products WHERE id IN (${ph})`, productIds);
-                for (const r of imgRows) if (r.image_path) itemImages[r.id] = r.image_path;
-            }
+        const productIds = items.map(i => i.product_id).filter(Boolean);
+        if (productIds.length) {
+            const ph = productIds.map(() => '?').join(',');
+            const [imgRows] = await db.query(`SELECT id, image_path FROM products WHERE id IN (${ph})`, productIds);
+            for (const r of imgRows) if (r.image_path) itemImages[r.id] = r.image_path;
         }
 
         const pdfSettings = await getPdfSettings();
-        const buf    = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items, { withImages, itemImages, ...pdfSettings });
-        const suffix = withImages ? '-with-images' : '';
-        res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${q.quotation_number}${suffix}.pdf"`, 'Content-Length': buf.length });
+        const buf = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items, { withImages: true, itemImages, ...pdfSettings });
+        res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${q.quotation_number}.pdf"`, 'Content-Length': buf.length });
         res.end(buf);
     } catch (e) { console.error(e); res.status(500).send('Error'); }
 });
@@ -1029,11 +1000,15 @@ router.post('/content', async (req, res) => {
 // never needs a schema change.
 
 const SETTINGS_BOOL_KEYS = ['wholesaler_enabled', 'site_lock_enabled', 'show_net_weight', 'show_gross_weight', 'show_amount'];
-const PDF_LAYOUTS = ['grid2', 'grid3', 'list'];
+const PDF_LAYOUTS = ['grid2', 'grid3']; // 'list' (no images) removed — Batch 20 item 1 always includes images
+// CSS object-fit keywords applied to every product card image site-wide
+// (Batch 20 item 8). 'fit' maps to 'scale-down' (never upscale past the
+// image's natural size, otherwise behaves like 'contain').
+const IMAGE_FIT_MODES = ['cover', 'contain', 'fill', 'scale-down'];
 
 router.get('/settings', async (req, res) => {
     try {
-        const keys = [...SETTINGS_BOOL_KEYS, 'pdf_layout', 'site_logo', 'site_favicon'];
+        const keys = [...SETTINGS_BOOL_KEYS, 'pdf_layout', 'product_image_fit', 'site_logo', 'site_favicon'];
         const [rows] = await db.query(
             `SELECT key_name, value FROM content WHERE key_name IN (${keys.map(() => '?').join(',')})`,
             keys
@@ -1048,6 +1023,7 @@ router.get('/settings', async (req, res) => {
                 showGrossWeight:   raw.show_gross_weight !== '0',
                 showAmount:        raw.show_amount       !== '0',
                 pdfLayout:         PDF_LAYOUTS.includes(raw.pdf_layout) ? raw.pdf_layout : 'grid2',
+                productImageFit:   IMAGE_FIT_MODES.includes(raw.product_image_fit) ? raw.product_image_fit : 'cover',
                 siteLogo:          raw.site_logo    || null,
                 siteFavicon:       raw.site_favicon || null,
             },
@@ -1066,6 +1042,9 @@ router.post('/settings', imageUpload.fields([{ name: 'logo', maxCount: 1 }, { na
         }
         if (req.body.pdf_layout !== undefined && PDF_LAYOUTS.includes(req.body.pdf_layout)) {
             await setKV('pdf_layout', req.body.pdf_layout);
+        }
+        if (req.body.product_image_fit !== undefined && IMAGE_FIT_MODES.includes(req.body.product_image_fit)) {
+            await setKV('product_image_fit', req.body.product_image_fit);
         }
         if (req.body.site_lock_password) {
             const hash = await bcrypt.hash(String(req.body.site_lock_password), 10);

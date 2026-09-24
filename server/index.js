@@ -62,6 +62,20 @@ app.get(/.*/, (req, res) => {
     res.sendFile(path.join(distDir, 'index.html'));
 });
 
+// Catches any error thrown/passed to next() in an /api route — most
+// importantly multer's upload middleware (unsupported file type, file too
+// large), which otherwise reaches Express's default handler and returns an
+// HTML stack-trace page. The client always expects JSON back; parsing that
+// HTML as JSON threw uncaught, which is why Add/Edit Product's "Saving…"
+// button could get stuck forever with no error shown whenever a file the
+// image filter rejected was picked (e.g. a phone's HEIC photos).
+app.use((err, req, res, next) => {
+    console.error('[error]', req.method, req.originalUrl, err.message);
+    if (res.headersSent) return next(err);
+    const status = err.status || err.statusCode || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 400);
+    res.status(status).json({ ok: false, error: err.message || 'Server error' });
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Coral Gold server running on http://localhost:${PORT}`);

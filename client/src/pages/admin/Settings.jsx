@@ -44,6 +44,7 @@ export default function Settings() {
     fd.append('show_gross_weight',  s.showGrossWeight   ? '1' : '0');
     fd.append('show_amount',        s.showAmount        ? '1' : '0');
     fd.append('pdf_layout',         s.pdfLayout);
+    fd.append('product_image_fit',  s.productImageFit);
     if (lockPassword) fd.append('site_lock_password', lockPassword);
     if (logoFile)     fd.append('logo', logoFile);
     if (faviconFile)  fd.append('favicon', faviconFile);
@@ -113,7 +114,6 @@ export default function Settings() {
             {[
               { v: 'grid2', label: '2 × 2 Grid', hint: 'Large photos, 2 per row' },
               { v: 'grid3', label: '3 × 3 Grid', hint: 'Compact photos, 3 per row' },
-              { v: 'list',  label: 'List',       hint: 'No photos — data table only' },
             ].map(opt => (
               <label
                 key={opt.v}
@@ -129,8 +129,35 @@ export default function Settings() {
             ))}
           </div>
           <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 10 }}>
-            Applies to the "PDF + Images" download. The plain "PDF" (no images) always uses the list layout.
+            Quotation PDFs always include product images, in this layout.
           </p>
+        </div>
+
+        <div className="admin-card">
+          <h3 style={{ marginBottom: 4 }}>Product Card Image Fit</h3>
+          <p style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 12 }}>
+            How product photos are scaled to fill their card, everywhere a product card appears.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[
+              { v: 'cover',      label: 'Cover',    hint: 'Fills the card, cropping edges' },
+              { v: 'contain',    label: 'Contain',  hint: 'Whole image visible, may letterbox' },
+              { v: 'fill',       label: 'Stretch',  hint: 'Fills the card, may distort' },
+              { v: 'scale-down', label: 'Fit',       hint: 'Shrinks to fit, never enlarges' },
+            ].map(opt => (
+              <label
+                key={opt.v}
+                className={`category-picker-item${s.productImageFit === opt.v ? ' checked' : ''}`}
+                style={{ flexDirection: 'column', alignItems: 'flex-start', padding: '10px 14px', gap: 2, minWidth: 150 }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input type="radio" name="product_image_fit" value={opt.v} checked={s.productImageFit === opt.v} onChange={() => set('productImageFit', opt.v)} />
+                  {opt.label}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--mid)', fontWeight: 400 }}>{opt.hint}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="admin-card">

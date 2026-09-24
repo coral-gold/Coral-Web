@@ -65,8 +65,8 @@ export default function AdminQuotations() {
     debounce.current = setTimeout(() => load({ page: 1 }), 350);
   }, [search]);
 
-  function openPdf(id, mode) {
-    window.open(`/api/admin/quotations/${id}/pdf?mode=${mode}`, '_blank');
+  function openPdf(id) {
+    window.open(`/api/admin/quotations/${id}/pdf`, '_blank');
   }
 
   return (
@@ -119,8 +119,7 @@ export default function AdminQuotations() {
                 <td>{q.item_count}</td>
                 <td>{parseFloat(q.total_gross_weight || 0).toFixed(3)}g</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, 'text')} style={{ marginRight: 6 }}>PDF</button>
-                  <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, 'images')}>+ Images</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id)}>Download PDF</button>
                 </td>
               </tr>
             ))}

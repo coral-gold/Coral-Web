@@ -152,12 +152,26 @@ function LibraryTab() {
                 <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>
                   {new Date(f.mtime).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </td>
-                <td style={{ fontSize: 11, color: 'var(--mid)', maxWidth: 180, wordBreak: 'break-all' }}>
-                  {absoluteUrl(f.url)}
+                <td style={{ fontSize: 11, color: 'var(--mid)' }}>
+                  {/* The full URL wrapped or ran unbounded, stretching this
+                      column (and the whole row) far past every other cell's
+                      actual content width — truncate it to a fixed-width
+                      ellipsis instead, with the full link still reachable
+                      via title-attribute hover and the Copy Link button.
+                      A fixed `width` (not max-width) is needed here: auto
+                      table layout sizes columns off each cell's unclipped
+                      max-content width, which overflow:hidden alone doesn't
+                      constrain. */}
+                  <span
+                    title={absoluteUrl(f.url)}
+                    style={{ display: 'block', width: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
+                    {absoluteUrl(f.url)}
+                  </span>
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="btn btn-sm btn-outline" onClick={() => copyUrl(f.url)} style={{ marginRight: 6 }}>
-                    {copied === f.url ? '✓ Copied' : 'Copy URL'}
+                    {copied === f.url ? '✓ Copied' : 'Copy Link'}
                   </button>
                   <button className="btn btn-sm btn-danger" onClick={() => del(f.key, f.filename)}>Delete</button>
                 </td>

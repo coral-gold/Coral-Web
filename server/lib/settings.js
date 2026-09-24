@@ -1,7 +1,7 @@
 'use strict';
 const db = require('../db');
 
-const PDF_LAYOUTS = ['grid2', 'grid3', 'list'];
+const PDF_LAYOUTS = ['grid2', 'grid3']; // 'list' (no images) removed — Batch 20 item 1 always includes images
 
 // Small shared helper — every place that generates a quotation PDF (the
 // wholesaler's own "Generate PDF" and Admin's PDF download) needs the same

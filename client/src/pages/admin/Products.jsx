@@ -79,7 +79,7 @@ export default function Products() {
   }
 
   function goToPage(p) {
-    load(p, sort);
+    return load(p, sort);
   }
 
   useEffect(() => {

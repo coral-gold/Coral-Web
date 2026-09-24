@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
@@ -13,10 +13,9 @@ const PRODUCT_FIELDS = [
   { value: 'quantity',     label: 'Quantity' },
   { value: 'amount',       label: 'Amount (diamond/stone)' },
   { value: 'description',  label: 'Description' },
-  { value: 'image_path',   label: 'Image Path (for matching)' },
 ];
 
-const STEP = { UPLOAD: 0, MAP: 1, RUNNING: 2, DONE: 3, IMAGES: 4 };
+const STEP = { UPLOAD: 0, MAP: 1, RUNNING: 2, DONE: 3 };
 
 const STRATEGIES = [
   { value: 'skip',    label: 'Skip Same (default)',        desc: 'If Style Number already exists, leave it unchanged.' },
@@ -28,15 +27,12 @@ const STRATEGIES = [
 export default function Import() {
   const [step,        setStep]       = useState(STEP.UPLOAD);
   const [xlsxFile,    setXlsxFile]   = useState(null);
-  const [stockImages, setStockImages]= useState(null);   // FileList from multi-file picker
   const [strategy,    setStrategy]   = useState('skip');
   const [preview,     setPreview]    = useState(null);   // { fileId, headers, suggestions, rowCount }
   const [mapping,     setMapping]    = useState({});     // { header: fieldName | '' }
   const [result,      setResult]     = useState(null);
   const [runProgress, setRunProgress]= useState(null);   // { done, total, step }
-  const [imgProgress, setImgProgress]= useState(null);   // { done, total, matched, skipped }
   const { show } = useToast();
-  const stockImageRef = useRef(null);
 
   // ── Step 1: upload & preview ──────────────────────────────────────────────
 
@@ -87,56 +83,6 @@ export default function Import() {
 
     setResult(jobResult);
     show(`Done: ${jobResult.inserted} new, ${jobResult.updated} updated`);
-
-    // If stock images selected and imageMap returned, go to image upload step
-    if (stockImages && jobResult.imageMap && jobResult.imageMap.length > 0) {
-      setStep(STEP.IMAGES);
-      await uploadImages(jobResult.imageMap, stockImages);
-    } else {
-      setStep(STEP.DONE);
-    }
-  }
-
-  // ── Step 4: image upload ──────────────────────────────────────────────────
-
-  async function uploadImages(imageMap, files) {
-    // Index all files by stem (filename without extension), case-insensitive.
-    const fileIndex = {};
-    for (const f of files) {
-      const stem = f.name.toLowerCase().replace(/\.[^.]+$/, '');
-      if (stem) fileIndex[stem] = f;
-    }
-
-    // Deduplicate imageMap by design_number (server already does this, but guard client-side too)
-    const seen = new Set();
-    const dedupedMap = [];
-    for (const entry of imageMap) {
-      const key = (entry.design_number || entry.jewel_code).toLowerCase().trim();
-      if (!seen.has(key)) { seen.add(key); dedupedMap.push(entry); }
-    }
-
-    let done = 0, matched = 0, skipped = 0;
-    setImgProgress({ done: 0, total: dedupedMap.length, matched: 0, skipped: 0 });
-
-    for (const { design_number, jewel_code } of dedupedMap) {
-      // Match solely by Design Number (Style Number) = image filename stem.
-      // Category column and subfolder name are irrelevant — never compared.
-      const dn = (design_number || jewel_code).toLowerCase().trim();
-      const file = fileIndex[dn];
-
-      if (file) {
-        const fd = new FormData();
-        fd.append('design_number', design_number || jewel_code);
-        fd.append('image', file);
-        const r = await api.form('/admin/import/images', fd);
-        if (r.ok) matched++;
-        else skipped++;
-      } else {
-        skipped++;
-      }
-      done++;
-      setImgProgress({ done, total: dedupedMap.length, matched, skipped });
-    }
     setStep(STEP.DONE);
   }
 
@@ -145,16 +91,12 @@ export default function Import() {
   function reset() {
     setStep(STEP.UPLOAD);
     setXlsxFile(null);
-    setStockImages(null);
     setPreview(null);
     setMapping({});
     setResult(null);
-    setImgProgress(null);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
-
-  const hasImageMap = result?.imageMap?.length > 0;
 
   return (
     <AdminLayout>
@@ -165,9 +107,9 @@ export default function Import() {
         {[['1. Upload', STEP.UPLOAD], ['2. Map Columns', STEP.MAP], ['3. Results', STEP.DONE]].map(([label, s]) => (
           <span key={s} style={{
             padding: '4px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-            background: step === s || (step === STEP.RUNNING && s === STEP.MAP) || (step === STEP.IMAGES && s === STEP.DONE)
+            background: step === s || (step === STEP.RUNNING && s === STEP.MAP)
               ? 'var(--garnet)' : 'rgba(0,0,0,0.06)',
-            color: step === s || (step === STEP.RUNNING && s === STEP.MAP) || (step === STEP.IMAGES && s === STEP.DONE)
+            color: step === s || (step === STEP.RUNNING && s === STEP.MAP)
               ? '#fff' : 'var(--mid)',
           }}>{label}</span>
         ))}
@@ -184,33 +126,6 @@ export default function Import() {
             </div>
 
             <div className="form-group">
-              <label>
-                Stock Image <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(optional — for batch image upload)</span>
-              </label>
-              <input
-                ref={stockImageRef}
-                type="file"
-                accept="image/*"
-                multiple
-                style={{ display: 'none' }}
-                onChange={e => setStockImages(e.target.files)}
-              />
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button type="button" className="btn btn-outline btn-sm" onClick={() => stockImageRef.current?.click()}>
-                  Choose Images
-                </button>
-                {stockImages
-                  ? <span style={{ fontSize: 13, color: 'var(--mid)' }}>{stockImages.length} image{stockImages.length === 1 ? '' : 's'} selected</span>
-                  : <span style={{ fontSize: 13, color: 'var(--mid)' }}>None selected</span>
-                }
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 6 }}>
-                Select any number of image files at once. Each image is matched by its filename (without extension)
-                against the product's Design Number / Style Number — the Category column is not used for matching.
-              </p>
-            </div>
-
-            <div className="form-group">
               <label>Duplicate Style Number strategy</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
                 {STRATEGIES.map(s => (
@@ -223,9 +138,6 @@ export default function Import() {
                   </label>
                 ))}
               </div>
-              <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 8 }}>
-                Images are always attached if the product currently has no image, regardless of strategy.
-              </p>
             </div>
 
             <button type="submit" className="btn btn-primary" disabled={!xlsxFile}>
@@ -280,12 +192,6 @@ export default function Import() {
               </p>
             )}
 
-            {stockImages && (
-              <p style={{ fontSize: 13, color: '#27ae60', marginBottom: 12 }}>
-                ✓ {stockImages.length} stock image{stockImages.length === 1 ? '' : 's'} ready for upload. Images will be matched by Design Number (Style Number).
-              </p>
-            )}
-
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" className="btn btn-outline" onClick={() => setStep(STEP.UPLOAD)}>← Back</button>
               <button type="submit" className="btn btn-primary"
@@ -322,23 +228,7 @@ export default function Import() {
         </div>
       )}
 
-      {/* ── STEP 4: Image upload progress ── */}
-      {step === STEP.IMAGES && imgProgress && (
-        <div className="admin-card" style={{ maxWidth: 400 }}>
-          <h3 style={{ marginBottom: 12 }}>Uploading Images</h3>
-          <div style={{ background: 'rgba(0,0,0,0.06)', borderRadius: 6, height: 10, overflow: 'hidden', marginBottom: 12 }}>
-            <div style={{
-              height: '100%', background: 'var(--garnet)', transition: 'width .2s',
-              width: `${Math.round((imgProgress.done / imgProgress.total) * 100)}%`
-            }} />
-          </div>
-          <p style={{ fontSize: 14, color: 'var(--mid)' }}>
-            {imgProgress.done} / {imgProgress.total} processed — {imgProgress.matched} uploaded, {imgProgress.skipped} not found
-          </p>
-        </div>
-      )}
-
-      {/* ── STEP 5: Done ── */}
+      {/* ── STEP 4: Done ── */}
       {step === STEP.DONE && result && (
         <>
           <div className="admin-card" style={{ maxWidth: 480 }}>
@@ -350,12 +240,6 @@ export default function Import() {
                 {result.skipped > 0 && <li>{result.skipped} rows skipped</li>}
               </ul>
             </div>
-
-            {imgProgress && (
-              <div className="alert alert-success" style={{ marginTop: 12, marginBottom: 0 }}>
-                <strong>Images:</strong> {imgProgress.matched} uploaded, {imgProgress.skipped} not matched in folder.
-              </div>
-            )}
 
             {result.errors?.length > 0 && (
               <div className="alert alert-warning" style={{ marginTop: 12, marginBottom: 0 }}>
