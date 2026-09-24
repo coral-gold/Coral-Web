@@ -8,10 +8,10 @@ router.use(requireParty);
 
 async function cartPayload(partyId) {
     const [rows] = await db.query(
-        `SELECT ci.id AS cartId, ci.product_id AS productId, ci.quantity,
+        `SELECT ci.id AS cartId, ci.product_id AS productId, ci.remark,
                 p.design_number AS designNo, p.jewel_code AS jewelCode,
                 p.gross_weight AS grossWeight, p.net_weight AS netWeight,
-                p.image_path AS image
+                p.amount, p.image_path AS image
          FROM cart_items ci JOIN products p ON p.id = ci.product_id
          WHERE ci.party_id = ? AND p.active = 1 ORDER BY ci.created_at`,
         [partyId]
@@ -20,9 +20,7 @@ async function cartPayload(partyId) {
         ...r,
         image: storage.getPublicUrl(r.image),
     }));
-    const itemCount  = lines.length;
-    const pieceCount = lines.reduce((s, l) => s + l.quantity, 0);
-    return { ok: true, lines, itemCount, pieceCount };
+    return { ok: true, lines, itemCount: lines.length };
 }
 
 // GET /api/cart
@@ -31,26 +29,26 @@ router.get('/', async (req, res) => {
     catch (e) { console.error(e); res.status(500).json({ ok: false }); }
 });
 
-// POST /api/cart  { action, productId, qty }
+// POST /api/cart  { action, productId, remark? }
+// No quantity — adding a product just puts one line in the cart. Each line
+// can optionally carry a free-text remark instead.
 router.post('/', async (req, res) => {
-    const { action, productId, qty } = req.body;
+    const { action, productId, remark } = req.body;
     const partyId = req.session.partyId;
 
     try {
         if (action === 'add') {
             const [[prod]] = await db.query('SELECT id FROM products WHERE id = ? AND active = 1', [productId]);
             if (!prod) return res.json({ ok: false, error: 'Product not found.' });
-            const addQty = Math.max(1, parseInt(qty) || 1);
             await db.query(
-                `INSERT INTO cart_items (party_id, product_id, quantity) VALUES (?,?,?)
-                 ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-                [partyId, productId, addQty, addQty]
+                `INSERT INTO cart_items (party_id, product_id, quantity) VALUES (?,?,1)
+                 ON DUPLICATE KEY UPDATE id = id`, // already in cart — no-op
+                [partyId, productId]
             );
-        } else if (action === 'set') {
-            const setQty = Math.max(1, parseInt(qty) || 1);
+        } else if (action === 'remark') {
             await db.query(
-                'UPDATE cart_items SET quantity = ? WHERE party_id = ? AND product_id = ?',
-                [setQty, partyId, productId]
+                'UPDATE cart_items SET remark = ? WHERE party_id = ? AND product_id = ?',
+                [(remark || '').substring(0, 500), partyId, productId]
             );
         } else if (action === 'remove') {
             await db.query(

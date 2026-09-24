@@ -33,10 +33,10 @@ export default function WholesalerLayout({ children }) {
             <Link to="/wholesaler/catalogue">Catalogue</Link>
             <Link to="/wholesaler/quotations">My Quotations</Link>
             <button
-              className={`cart-badge ${cart.pieceCount > 0 ? 'has-items' : ''}`}
+              className={`cart-badge ${cart.itemCount > 0 ? 'has-items' : ''}`}
               onClick={() => setPanelOpen(true)}
             >
-              🛒 <span>{cart.pieceCount}</span> pcs
+              🛒 <span>{cart.itemCount}</span> items
             </button>
             <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#c8b8a8', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}>
               Logout

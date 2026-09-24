@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS products (
     quantity INT DEFAULT 0,
     image_path VARCHAR(255),
     description TEXT,
+    amount VARCHAR(50),
     is_featured TINYINT DEFAULT 0,
     active TINYINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS cart_items (
     party_id INT NOT NULL,
     product_id INT NOT NULL,
     quantity INT NOT NULL DEFAULT 1,
+    remark TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_party_product (party_id, product_id),
     FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE,
@@ -75,6 +77,7 @@ CREATE TABLE IF NOT EXISTS quotation_items (
     net_weight DECIMAL(8,3),
     design_number VARCHAR(50),
     jewel_code VARCHAR(50),
+    remark TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)

@@ -37,7 +37,6 @@ export default function MyQuotations() {
                 <th>Quotation No.</th>
                 <th>Date</th>
                 <th>Items</th>
-                <th>Pcs</th>
                 <th>Gross Wt.</th>
                 <th>Download</th>
               </tr>
@@ -48,7 +47,6 @@ export default function MyQuotations() {
                   <td><strong>{q.quotation_number}</strong></td>
                   <td>{new Date(q.created_at).toLocaleDateString('en-IN')}</td>
                   <td>{q.item_count}</td>
-                  <td>{q.piece_count}</td>
                   <td>{parseFloat(q.total_gross_weight || 0).toFixed(3)}g</td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, 'text')} style={{ marginRight: 6 }}>

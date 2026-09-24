@@ -220,7 +220,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .product-card-body { padding: 14px; }
 .weight-primary { font-size: 22px; font-weight: 700; color: var(--dark); margin-bottom: 1px; line-height: 1.2; }
 .weight-primary span { font-size: 11px; font-weight: 500; color: var(--mid); }
-.weight-net { font-size: 13px; color: var(--mid); margin-bottom: 6px; }
+.weight-secondary { font-size: 13px; color: var(--mid); margin-bottom: 4px; }
+.product-amount { font-size: 12px; color: var(--mid); margin-bottom: 6px; }
 .product-code { font-size: 12px; color: var(--gold); font-weight: 600; letter-spacing: .3px; margin-bottom: 10px; }
 
 .qty-stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
@@ -258,20 +259,16 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .quot-panel .panel-footer { padding: 16px; border-top: 1px solid var(--border); flex-shrink: 0; background: #fdf8f2; }
 .panel-summary { font-size: 14px; color: var(--mid); margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 
-.panel-item { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); padding: 10px 0; }
+.panel-item { display: flex; align-items: flex-start; gap: 10px; border-bottom: 1px solid var(--border); padding: 10px 0; }
 .panel-item-img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
 .panel-item-placeholder { width: 48px; height: 48px; background: var(--light); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
-.panel-item-info { flex: 1; }
+.panel-item-info { flex: 1; min-width: 0; }
 .panel-item-info .wt { font-size: 14px; font-weight: 700; color: var(--dark); }
-.panel-item-info .code { font-size: 11px; color: var(--gold); font-weight: 600; }
-.panel-item-qty { display: flex; align-items: center; gap: 5px; }
-.panel-item-qty button {
-  width: 26px; height: 26px; border: 1px solid var(--border); background: var(--light);
-  border-radius: 4px; cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center;
-  transition: all .15s;
+.panel-item-info .code { font-size: 11px; color: var(--gold); font-weight: 600; margin-bottom: 4px; }
+.panel-item-remark {
+  width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px;
+  font-size: 12px; font-family: inherit; box-sizing: border-box;
 }
-.panel-item-qty button:hover { background: var(--gold); border-color: var(--gold); color: #fff; }
-.panel-item-qty input { width: 40px; text-align: center; border: 1px solid var(--border); border-radius: 4px; padding: 3px; font-size: 13px; }
 .panel-remove { background: none; border: none; color: #c0392b; cursor: pointer; font-size: 16px; padding: 4px; opacity: .7; transition: opacity .15s; }
 .panel-remove:hover { opacity: 1; }
 .panel-empty { text-align: center; color: var(--mid); padding: 48px 20px; font-size: 14px; }

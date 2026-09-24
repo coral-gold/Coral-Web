@@ -1,42 +1,24 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/PublicLayout';
 import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
+// Public catalog is a preview, not the real catalogue: a limited set of
+// categories with a few sample images each, meant to invite wholesalers to
+// log in for the full listing (Batch 15 item 3) rather than serve as a
+// browsable/searchable product listing.
 export default function Catalog() {
-  const [products,   setProducts]   = useState([]);
   const [categories, setCategories] = useState([]);
-  const [activeCat,  setActiveCat]  = useState('');
-  const [search,     setSearch]     = useState('');
-  const [page,       setPage]       = useState(1);
-  const [hasMore,    setHasMore]    = useState(false);
-  const [loading,    setLoading]    = useState(false);
+  const [loading,    setLoading]    = useState(true);
   const openImage = useLightbox();
-  const debounce = useRef(null);
 
   useEffect(() => {
-    api.get('/catalogue/categories').then(d => { if (d.ok) setCategories(d.categories); });
+    api.get('/catalogue/preview').then(d => {
+      if (d.ok) setCategories(d.categories);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
-
-  const load = useCallback(async (reset = false) => {
-    if (loading) return;
-    setLoading(true);
-    const p = reset ? 1 : page;
-    try {
-      const d = await api.get(`/catalogue?mode=public&page=${p}&category=${encodeURIComponent(activeCat)}&search=${encodeURIComponent(search)}`);
-      if (d.ok) {
-        setProducts(prev => reset ? d.products : [...prev, ...d.products]);
-        setHasMore(d.hasMore);
-        setPage(p + 1);
-      }
-    } finally { setLoading(false); }
-  }, [activeCat, search, page, loading]);
-
-  useEffect(() => { setPage(1); load(true); }, [activeCat]);
-  useEffect(() => {
-    clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { setPage(1); load(true); }, 350);
-  }, [search]);
 
   return (
     <PublicLayout>
@@ -44,62 +26,46 @@ export default function Catalog() {
         <div className="container">
           <h1 style={{ fontSize: 38 }}>Our Catalogue</h1>
           <div className="gold-line" />
-          <p style={{ fontSize: 15 }}>Browse our collection — login as a wholesaler to place orders.</p>
+          <p style={{ fontSize: 15 }}>A preview of our collection — log in as a wholesaler to browse the full catalogue and place orders.</p>
         </div>
       </section>
 
       <section className="section">
         <div className="container">
-          <div className="search-bar mb-2">
-            <input
-              type="search"
-              className="form-control"
-              placeholder="Search by design number…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
+          {loading && <p style={{ color: 'var(--mid)', padding: '20px 0' }}>Loading…</p>}
 
-          <div className="catalogue-filters mb-2">
-            <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>
-              All
-            </button>
-            {categories.map(c => (
-              <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
-                {c}
-              </button>
-            ))}
-          </div>
-
-          {loading && products.length === 0 && (
-            <p style={{ color: 'var(--mid)', padding: '20px 0' }}>Loading…</p>
+          {!loading && categories.length === 0 && (
+            <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products available yet.</p>
           )}
 
-          <div className="catalog-grid">
-            {products.map(p => (
-              <div key={p.id} className="pub-card">
-                {p.image
-                  ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" onClick={() => openImage(p.image)} style={{ cursor: 'zoom-in' }} />
-                  : <div className="pub-card-img-placeholder">💍</div>
-                }
-                <div className="pub-card-body">
-                  <div className="design-no">{p.designNo}</div>
-                  <p style={{ fontSize: 13, color: 'var(--mid)' }}>{p.category}</p>
-                  {p.description && <p style={{ fontSize: 13, marginTop: 4 }}>{p.description}</p>}
-                </div>
+          {categories.map(cat => (
+            <div key={cat.name} style={{ marginBottom: 40 }}>
+              <div className="section-title" style={{ textAlign: 'left', marginBottom: 16 }}>
+                <h2 style={{ fontSize: 22 }}>{cat.name}</h2>
+                <div className="gold-line" style={{ margin: '6px 0 0' }} />
               </div>
-            ))}
-          </div>
+              <div className="catalog-grid">
+                {cat.products.map(p => (
+                  <div key={p.id} className="pub-card">
+                    {p.image
+                      ? <img src={p.image} className="pub-card-img" alt={p.designNo} loading="lazy" onClick={() => openImage(p.image)} style={{ cursor: 'zoom-in' }} />
+                      : <div className="pub-card-img-placeholder">💍</div>
+                    }
+                    <div className="pub-card-body">
+                      <div className="design-no">{p.designNo}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
 
-          {!loading && products.length === 0 && (
-            <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products found.</p>
-          )}
-
-          {hasMore && (
-            <div style={{ textAlign: 'center', marginTop: 32 }}>
-              <button className="btn btn-outline" onClick={() => load(false)} disabled={loading}>
-                {loading ? 'Loading…' : 'Load More'}
-              </button>
+          {!loading && categories.length > 0 && (
+            <div style={{ textAlign: 'center', marginTop: 20, padding: '32px 20px', background: 'var(--surface)', borderRadius: 'var(--radius)' }}>
+              <p style={{ marginBottom: 16, color: 'var(--mid)' }}>
+                This is a preview — log in as a wholesaler to see the full catalogue, weights, and place orders.
+              </p>
+              <Link to="/wholesaler/login" className="btn btn-primary">Wholesaler Login</Link>
             </div>
           )}
         </div>

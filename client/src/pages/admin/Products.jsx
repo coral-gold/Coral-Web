@@ -5,7 +5,7 @@ import { useToast } from '../../components/Toast';
 import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
-const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', description: '' };
+const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', amount: '', description: '' };
 
 function Th({ col, sort, onSort, children }) {
   const active = sort.col === col;
@@ -99,6 +99,7 @@ export default function Products() {
       category_id:   String(p.category_id || ''),
       gross_weight:  p.gross_weight  || '',
       net_weight:    p.net_weight    || '',
+      amount:        p.amount        || '',
       description:   p.description   || '',
     });
     setEditId(p.id); setImageFile(null); setEditImageUrl(p.image_url || null); setModal(true);
@@ -410,6 +411,10 @@ export default function Products() {
                   <label>Net Weight (g) *</label>
                   <input className="form-control" type="number" step="0.001" required value={form.net_weight} onChange={setF('net_weight')} />
                 </div>
+              </div>
+              <div className="form-group">
+                <label>Amount <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(diamond/stone content, e.g. "2.5ct" or "12 pcs")</span></label>
+                <input className="form-control" value={form.amount} onChange={setF('amount')} />
               </div>
               <div className="form-group">
                 <label>Description</label>

@@ -207,16 +207,16 @@ function productSaveError(e, action) {
 }
 
 router.post('/products', imageUpload.single('image'), async (req, res) => {
-    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured } = req.body;
+    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured, amount } = req.body;
     if (!category_id || !design_number || !jewel_code) {
         return res.json({ ok: false, error: 'Category, Design Number and Jewel Code are required.' });
     }
     try {
         const imgPath = req.file ? await saveImage(req.file) : null;
         const [r] = await db.query(
-            'INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, image_path, description, is_featured) VALUES (?,?,?,?,?,?,?,?)',
+            'INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, image_path, description, is_featured, amount) VALUES (?,?,?,?,?,?,?,?,?)',
             [category_id, design_number, jewel_code, gross_weight || null, net_weight || null,
-             imgPath, description || null, is_featured ? 1 : 0]
+             imgPath, description || null, is_featured ? 1 : 0, amount || null]
         );
         res.json({ ok: true, id: r.insertId });
     } catch (e) {
@@ -230,7 +230,7 @@ router.post('/products', imageUpload.single('image'), async (req, res) => {
 // (description, is_featured) was silently overwritten with NULL/0 on every
 // save, corrupting data without any error being shown.
 router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
-    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured } = req.body;
+    const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured, amount } = req.body;
     if (!category_id || !design_number || !jewel_code) {
         return res.json({ ok: false, error: 'Category, Design Number and Jewel Code are required.' });
     }
@@ -239,6 +239,7 @@ router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
         const vals = [category_id, design_number, jewel_code, gross_weight || null, net_weight || null];
         if (description !== undefined) { sets.push('description=?');  vals.push(description || null); }
         if (is_featured !== undefined) { sets.push('is_featured=?');  vals.push(is_featured ? 1 : 0); }
+        if (amount      !== undefined) { sets.push('amount=?');       vals.push(amount || null); }
         if (req.file) {
             const imgPath = await saveImage(req.file);
             sets.push('image_path=?'); vals.push(imgPath);
@@ -358,6 +359,11 @@ const FIELD_ALIASES = {
     'netwt':          'net_weight',
     'qty':            'quantity',
     'quantity':       'quantity',
+    'amount':         'amount',
+    'stone amount':   'amount',
+    'diamond amount': 'amount',
+    'stone':          'amount',
+    'diamond':        'amount',
     'descr':          'description',
     'description':    'description',
     'remark':         'description',
@@ -536,6 +542,7 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
         const grossWt     = col.gross_weight !== undefined ? parseFloat(row[col.gross_weight]) || null : null;
         const netWt       = col.net_weight   !== undefined ? parseFloat(row[col.net_weight])   || null : null;
         const descr       = col.description  !== undefined ? String(row[col.description]  ?? '').trim() || null : null;
+        const amountVal   = col.amount       !== undefined ? String(row[col.amount]       ?? '').trim() || null : null;
 
         if (!seenInFile.has(styleKey)) {
             const imgEntry = { jewel_code: jewelCode, design_number: finalDesign };
@@ -573,15 +580,15 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
             }
 
             const [[existing]] = await db.query(
-                'SELECT id, jewel_code, category_id, gross_weight, net_weight, description FROM products WHERE design_number = ?',
+                'SELECT id, jewel_code, category_id, gross_weight, net_weight, description, amount FROM products WHERE design_number = ?',
                 [finalDesign]
             );
 
             if (!existing) {
                 await db.query(
-                    `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, description)
-                     VALUES (?,?,?,?,?,?)`,
-                    [catId, finalDesign, jewelCode, grossWt, netWt, descr]
+                    `INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, description, amount)
+                     VALUES (?,?,?,?,?,?,?)`,
+                    [catId, finalDesign, jewelCode, grossWt, netWt, descr, amountVal]
                 );
                 inserted++;
             } else if (strat === 'skip') {
@@ -593,6 +600,7 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                 if (!existing.gross_weight && grossWt)   { sets.push('gross_weight = ?'); vals.push(grossWt); }
                 if (!existing.net_weight   && netWt)     { sets.push('net_weight = ?');   vals.push(netWt); }
                 if (!existing.description  && descr)     { sets.push('description = ?');  vals.push(descr); }
+                if (!existing.amount       && amountVal) { sets.push('amount = ?');       vals.push(amountVal); }
                 if (sets.length) {
                     await db.query(`UPDATE products SET ${sets.join(', ')} WHERE id = ?`, [...vals, existing.id]);
                     updated++;
@@ -604,9 +612,10 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                        category_id  = COALESCE(?, category_id),
                        gross_weight = COALESCE(?, gross_weight),
                        net_weight   = COALESCE(?, net_weight),
-                       description  = COALESCE(NULLIF(?, ''), description)
+                       description  = COALESCE(NULLIF(?, ''), description),
+                       amount       = COALESCE(NULLIF(?, ''), amount)
                      WHERE id = ?`,
-                    [jewelCode, catId || null, grossWt, netWt, descr, existing.id]
+                    [jewelCode, catId || null, grossWt, netWt, descr, amountVal, existing.id]
                 );
                 updated++;
             } else if (strat === 'replace') {
@@ -615,9 +624,9 @@ async function runImportJob(jobId, data, col, strat, totalRows) {
                 // (and id), so it can never hit the quotation_items foreign key
                 // constraint even when this product has quotation history.
                 await db.query(
-                    `UPDATE products SET category_id = ?, jewel_code = ?, gross_weight = ?, net_weight = ?, description = ?
+                    `UPDATE products SET category_id = ?, jewel_code = ?, gross_weight = ?, net_weight = ?, description = ?, amount = ?
                      WHERE id = ?`,
-                    [catId, jewelCode, grossWt, netWt, descr, existing.id]
+                    [catId, jewelCode, grossWt, netWt, descr, amountVal, existing.id]
                 );
                 updated++;
             }
@@ -791,8 +800,7 @@ router.get('/quotations', async (req, res) => {
         const [rows] = await db.query(
             `SELECT q.id, q.quotation_number, q.created_at, p.company_name, p.party_id AS pid,
                     COUNT(qi.id) AS item_count,
-                    COALESCE(SUM(qi.quantity), 0) AS piece_count,
-                    COALESCE(SUM(qi.quantity * qi.gross_weight), 0) AS total_gross_weight
+                    COALESCE(SUM(qi.gross_weight), 0) AS total_gross_weight
              FROM quotations q
              JOIN parties p ON p.id=q.party_id
              LEFT JOIN quotation_items qi ON qi.quotation_id=q.id

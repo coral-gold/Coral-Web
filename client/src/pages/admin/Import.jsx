@@ -11,6 +11,7 @@ const PRODUCT_FIELDS = [
   { value: 'gross_weight', label: 'Gross Weight' },
   { value: 'net_weight',   label: 'Net Weight' },
   { value: 'quantity',     label: 'Quantity' },
+  { value: 'amount',       label: 'Amount (diamond/stone)' },
   { value: 'description',  label: 'Description' },
   { value: 'image_path',   label: 'Image Path (for matching)' },
 ];

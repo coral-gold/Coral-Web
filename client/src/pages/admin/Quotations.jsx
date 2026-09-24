@@ -86,14 +86,13 @@ export default function AdminQuotations() {
               <Th col="company_name"     sort={sort} onSort={handleSort}>Party</Th>
               <Th col="created_at"       sort={sort} onSort={handleSort}>Date</Th>
               <th>Items</th>
-              <th>Pcs</th>
               <th>Gross Wt.</th>
               <th>Download</th>
             </tr>
           </thead>
           <tbody>
             {quotations.length === 0 && !loading && (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No quotations found.</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No quotations found.</td></tr>
             )}
             {quotations.map(q => (
               <tr key={q.id}>
@@ -101,7 +100,6 @@ export default function AdminQuotations() {
                 <td>{q.company_name} <span style={{ color: 'var(--mid)', fontSize: 12 }}>({q.pid})</span></td>
                 <td>{new Date(q.created_at).toLocaleDateString('en-IN')}</td>
                 <td>{q.item_count}</td>
-                <td>{q.piece_count}</td>
                 <td>{parseFloat(q.total_gross_weight || 0).toFixed(3)}g</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, 'text')} style={{ marginRight: 6 }}>PDF</button>

@@ -1,11 +1,8 @@
 'use strict';
 const router = require('express').Router();
-const path   = require('path');
 const db     = require('../db');
 const { requireParty } = require('../middleware/auth');
 const { generateQuotationPDF } = require('../pdf');
-
-const UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
 
 router.use(requireParty);
 
@@ -28,7 +25,7 @@ router.post('/generate', async (req, res) => {
         await conn.beginTransaction();
 
         const [cartRows] = await conn.query(
-            `SELECT ci.product_id, ci.quantity,
+            `SELECT ci.product_id, ci.remark,
                     p.design_number, p.jewel_code, p.gross_weight, p.net_weight
              FROM cart_items ci JOIN products p ON p.id = ci.product_id
              WHERE ci.party_id = ?`,
@@ -49,10 +46,10 @@ router.post('/generate', async (req, res) => {
         for (const row of cartRows) {
             await conn.query(
                 `INSERT INTO quotation_items
-                 (quotation_id, product_id, quantity, gross_weight, net_weight, design_number, jewel_code)
-                 VALUES (?,?,?,?,?,?,?)`,
-                [qId, row.product_id, row.quantity,
-                 row.gross_weight, row.net_weight, row.design_number, row.jewel_code]
+                 (quotation_id, product_id, quantity, gross_weight, net_weight, design_number, jewel_code, remark)
+                 VALUES (?,?,1,?,?,?,?,?)`,
+                [qId, row.product_id,
+                 row.gross_weight, row.net_weight, row.design_number, row.jewel_code, row.remark || null]
             );
         }
         await conn.query('DELETE FROM cart_items WHERE party_id = ?', [partyId]);
@@ -74,8 +71,7 @@ router.get('/', async (req, res) => {
         const [rows] = await db.query(
             `SELECT q.id, q.quotation_number, q.notes, q.created_at,
                     COUNT(qi.id) AS item_count,
-                    COALESCE(SUM(qi.quantity), 0) AS piece_count,
-                    COALESCE(SUM(qi.quantity * qi.gross_weight), 0) AS total_gross_weight
+                    COALESCE(SUM(qi.gross_weight), 0) AS total_gross_weight
              FROM quotations q LEFT JOIN quotation_items qi ON qi.quotation_id = q.id
              WHERE q.party_id = ?
              GROUP BY q.id ORDER BY q.created_at DESC`,

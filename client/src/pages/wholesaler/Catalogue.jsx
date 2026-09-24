@@ -1,20 +1,20 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import WholesalerLayout from '../../components/WholesalerLayout';
+import Pagination from '../../components/Pagination';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../components/Toast';
 import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
 function ProductCard({ product, inCart }) {
-  const { add, cart, setPanelOpen } = useCart();
+  const { add, setPanelOpen } = useCart();
   const { show } = useToast();
   const openImage = useLightbox();
-  const [qty,     setQty]     = useState(1);
   const [loading, setLoading] = useState(false);
 
   async function handleAdd() {
     setLoading(true);
-    const d = await add(product.id, qty);
+    const d = await add(product.id);
     setLoading(false);
     if (d.ok) { show('Added to quotation'); setPanelOpen(true); }
     else show(d.error || 'Could not add item.', 'error');
@@ -27,22 +27,16 @@ function ProductCard({ product, inCart }) {
         : <div className="product-card-placeholder">💍</div>
       }
       <div className="product-card-body">
-        <div className="weight-primary">{product.grossWeight}g <span>gross wt.</span></div>
-        <div className="weight-net">{product.netWeight}g net wt.</div>
+        {/* Priority order: Net Weight (most prominent), Gross Weight, Amount */}
+        <div className="weight-primary">{product.netWeight}g <span>net wt.</span></div>
+        <div className="weight-secondary">{product.grossWeight}g gross wt.</div>
+        {product.amount && <div className="product-amount">Amount: {product.amount}</div>}
         <div className="product-code">{product.designNo} &bull; {product.jewelCode}</div>
-        <div className="qty-stepper">
-          <button type="button" onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
-          <input
-            type="number" min="1" value={qty}
-            onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-          />
-          <button type="button" onClick={() => setQty(q => q + 1)}>+</button>
-        </div>
         <button
           type="button" className="btn btn-primary btn-sm btn-add-cart"
-          onClick={handleAdd} disabled={loading}
+          onClick={handleAdd} disabled={loading || inCart}
         >
-          {loading ? <><span className="spinner" />Adding…</> : 'Add to Quotation'}
+          {loading ? <><span className="spinner" />Adding…</> : inCart ? 'In Quotation' : 'Add to Quotation'}
         </button>
       </div>
     </div>
@@ -56,7 +50,8 @@ export default function WholesalerCatalogue() {
   const [activeCat,  setActiveCat]  = useState('');
   const [search,     setSearch]     = useState('');
   const [page,       setPage]       = useState(1);
-  const [hasMore,    setHasMore]    = useState(false);
+  const [pages,      setPages]      = useState(1);
+  const [total,      setTotal]      = useState(0);
   const [loading,    setLoading]    = useState(false);
   const debounce = useRef(null);
 
@@ -64,26 +59,27 @@ export default function WholesalerCatalogue() {
     api.get('/catalogue/categories').then(d => { if (d.ok) setCategories(d.categories); });
   }, []);
 
-  const load = useCallback(async (reset = false) => {
-    if (loading) return;
+  // Real server-side pagination — fetches and renders one page at a time,
+  // same approach as the admin panel (Batch 15 item 3).
+  async function load(p, cat, s) {
     setLoading(true);
-    const p = reset ? 1 : page;
     try {
       const d = await api.get(
-        `/catalogue?page=${p}&category=${encodeURIComponent(activeCat)}&search=${encodeURIComponent(search)}`
+        `/catalogue?page=${p}&category=${encodeURIComponent(cat)}&search=${encodeURIComponent(s)}`
       );
       if (d.ok) {
-        setProducts(prev => reset ? d.products : [...prev, ...d.products]);
-        setHasMore(d.hasMore);
-        setPage(p + 1);
+        setProducts(d.products);
+        setPage(p);
+        setPages(d.pages || 1);
+        setTotal(d.total || 0);
       }
     } finally { setLoading(false); }
-  }, [activeCat, search, page, loading]);
+  }
 
-  useEffect(() => { setPage(1); load(true); }, [activeCat]);
+  useEffect(() => { load(1, activeCat, search); }, [activeCat]);
   useEffect(() => {
     clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { setPage(1); load(true); }, 350);
+    debounce.current = setTimeout(() => { load(1, activeCat, search); }, 350);
   }, [search]);
 
   const inCartIds = new Set(cart.lines.map(l => l.productId));
@@ -125,13 +121,7 @@ export default function WholesalerCatalogue() {
         <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products found.</p>
       )}
 
-      {hasMore && (
-        <div style={{ textAlign: 'center', marginTop: 28 }}>
-          <button className="btn btn-outline" onClick={() => load(false)} disabled={loading}>
-            {loading ? 'Loading…' : 'Load More'}
-          </button>
-        </div>
-      )}
+      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, activeCat, search)} />
     </WholesalerLayout>
   );
 }

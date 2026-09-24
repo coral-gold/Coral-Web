@@ -10,6 +10,12 @@ async function runMigrations() {
     try {
         await addColumnIfMissing('products', 'active', "TINYINT NOT NULL DEFAULT 1");
         await ensureIndex('products', 'idx_active', '(active)');
+        // Static per-product diamond/stone amount (e.g. "2.5ct", "12 pcs") —
+        // distinct from order quantity, which is being removed in favor of remark.
+        await addColumnIfMissing('products', 'amount', "VARCHAR(50) NULL");
+        // Free-text note a party can attach per item, replacing order quantity.
+        await addColumnIfMissing('cart_items', 'remark', "TEXT NULL");
+        await addColumnIfMissing('quotation_items', 'remark', "TEXT NULL");
     } catch (e) {
         console.error('[migrations] failed:', e.message);
     }

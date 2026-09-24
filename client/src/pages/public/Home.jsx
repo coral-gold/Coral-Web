@@ -10,8 +10,8 @@ export default function Home() {
   const openImage = useLightbox();
 
   useEffect(() => {
-    api.get('/catalogue?mode=public&page=1').then(d => {
-      if (d.ok) setFeatured(d.products.slice(0, 4));
+    api.get('/catalogue/preview').then(d => {
+      if (d.ok) setFeatured(d.categories.flatMap(c => c.products).slice(0, 4));
     }).catch(() => {});
     api.get('/public/content').then(d => {
       if (d.ok) setContent(d.content);

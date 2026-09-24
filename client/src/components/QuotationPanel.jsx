@@ -1,19 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useCart } from '../context/CartContext';
 import { useToast } from './Toast';
 import { useLightbox } from './ImageLightbox';
 import api from '../api';
 
+function RemarkInput({ line, onSave }) {
+  const [value, setValue] = useState(line.remark || '');
+  const debounce = useRef(null);
+
+  useEffect(() => { setValue(line.remark || ''); }, [line.cartId]);
+
+  function handleChange(e) {
+    const v = e.target.value;
+    setValue(v);
+    clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => onSave(line.productId, v), 500);
+  }
+
+  return (
+    <input
+      type="text"
+      className="panel-item-remark"
+      placeholder="Remark (optional)…"
+      value={value}
+      onChange={handleChange}
+      maxLength={500}
+    />
+  );
+}
+
 export default function QuotationPanel() {
-  const { cart, set, remove, clear, panelOpen, setPanelOpen } = useCart();
+  const { cart, remark, remove, clear, panelOpen, setPanelOpen } = useCart();
   const { show } = useToast();
   const openImage = useLightbox();
   const [notes, setNotes]     = useState('');
   const [loading, setLoading] = useState(false);
 
-  const totalGross = cart.lines.reduce(
-    (s, l) => s + parseFloat(l.grossWeight || 0) * l.quantity, 0
-  );
+  const totalGross = cart.lines.reduce((s, l) => s + parseFloat(l.grossWeight || 0), 0);
 
   async function handleGenerate() {
     if (!cart.lines.length) { show('Cart is empty', 'error'); return; }
@@ -50,7 +73,7 @@ export default function QuotationPanel() {
 
       <div className={`quot-panel ${panelOpen ? 'open' : ''}`}>
         <div className="panel-header">
-          <h3>Quotation List ({cart.pieceCount} pcs)</h3>
+          <h3>Quotation List ({cart.itemCount} items)</h3>
           <button className="panel-close" onClick={() => setPanelOpen(false)}>✕</button>
         </div>
 
@@ -65,16 +88,9 @@ export default function QuotationPanel() {
                   : <div className="panel-item-placeholder">💍</div>
                 }
                 <div className="panel-item-info">
-                  <div className="wt">{line.grossWeight}g <small>gross</small></div>
+                  <div className="wt">{line.netWeight}g <small>net</small> &nbsp; {line.grossWeight}g <small>gross</small></div>
                   <div className="code">{line.designNo} · {line.jewelCode}</div>
-                </div>
-                <div className="panel-item-qty">
-                  <button onClick={() => set(line.productId, Math.max(1, line.quantity - 1))}>−</button>
-                  <input
-                    type="number" min="1" value={line.quantity}
-                    onChange={e => set(line.productId, Math.max(1, parseInt(e.target.value) || 1))}
-                  />
-                  <button onClick={() => set(line.productId, line.quantity + 1)}>+</button>
+                  <RemarkInput line={line} onSave={remark} />
                 </div>
                 <button className="panel-remove" onClick={() => remove(line.productId)} title="Remove">✕</button>
               </div>
@@ -85,7 +101,7 @@ export default function QuotationPanel() {
         <div className="panel-footer">
           {cart.lines.length > 0 && (
             <div className="panel-summary">
-              <strong>{cart.pieceCount}</strong> pcs &mdash; Total gross:{' '}
+              <strong>{cart.itemCount}</strong> items &mdash; Total gross:{' '}
               <strong>{totalGross.toFixed(3)}g</strong>
             </div>
           )}

@@ -26,11 +26,11 @@ function drawPageFooter(doc, quotation) {
 function drawTableHeader(doc, y, withImages) {
     const ROW = 18;
     const cols = withImages
-        ? [L, L+46, L+136, L+236, L+306, L+376, L+436, L+W]
-        : [L, L+90, L+195, L+270, L+345, L+410, L+W];
+        ? [L, L+46, L+136, L+216, L+276, L+336, L+W]
+        : [L, L+80, L+180, L+250, L+320, L+W];
     const heads = withImages
-        ? ['', 'Design No.', 'Jewel Code', 'Gross Wt.', 'Net Wt.', 'Qty', 'Total Gross']
-        : ['Design No.', 'Jewel Code', 'Gross Wt.', 'Net Wt.', 'Qty (Pcs)', 'Total Gross'];
+        ? ['', 'Design No.', 'Jewel Code', 'Gross Wt.', 'Net Wt.', 'Remark']
+        : ['Design No.', 'Jewel Code', 'Gross Wt.', 'Net Wt.', 'Remark'];
 
     doc.rect(L, y, W, ROW).fillColor('#8b0000').fill();
     doc.fontSize(8).font('Helvetica-Bold').fillColor('#ffffff');
@@ -43,12 +43,12 @@ function drawTableHeader(doc, y, withImages) {
 // ── Main generator ────────────────────────────────────────────────────────────
 async function generateQuotationPDF(quotation, party, items, options = {}) {
     const { withImages = false, itemImages = {} } = options;
-    const ROW_H = withImages ? 50 : 18;
+    const ROW_H = withImages ? 50 : 24; // a bit taller than before to leave room for a wrapped remark
 
     // Column x-positions
     const cols = withImages
-        ? [L, L+46, L+136, L+236, L+306, L+376, L+436, L+W]
-        : [L, L+90, L+195, L+270, L+345, L+410, L+W];
+        ? [L, L+46, L+136, L+216, L+276, L+336, L+W]
+        : [L, L+80, L+180, L+250, L+320, L+W];
 
     // Pre-fetch every needed image as a Buffer before drawing starts — PDFKit's
     // synchronous drawing loop can't await mid-stream, and storage.getBuffer()
@@ -100,15 +100,11 @@ async function generateQuotationPDF(quotation, party, items, options = {}) {
         // ── Table ─────────────────────────────────────────────────
         let y = drawTableHeader(doc, metaY + 68, withImages);
 
-        let totalGross = 0, totalNet = 0, totalPcs = 0;
+        let totalGross = 0, totalNet = 0;
 
         items.forEach((it, idx) => {
-            const rowQty = parseInt(it.quantity || 0);
-            const rg     = parseFloat(it.gross_weight || 0) * rowQty;
-            const rn     = parseFloat(it.net_weight   || 0) * rowQty;
-            totalGross  += rg;
-            totalNet    += rn;
-            totalPcs    += rowQty;
+            totalGross += parseFloat(it.gross_weight || 0);
+            totalNet   += parseFloat(it.net_weight   || 0);
 
             // Page break
             if (y + ROW_H > SAFE_BOT) {
@@ -132,24 +128,22 @@ async function generateQuotationPDF(quotation, party, items, options = {}) {
                 }
             }
 
-            // Data cells
+            // Data cells (design no. / jewel code / weights are single-line;
+            // remark is allowed to wrap onto a second line within the row)
             const cellDefs = withImages
                 ? [
                     { text: it.design_number || '—',       colIdx: 1, bold: false },
                     { text: it.jewel_code    || '—',       colIdx: 2, bold: false },
                     { text: fmtW(it.gross_weight) + 'g',   colIdx: 3, bold: true  },
                     { text: fmtW(it.net_weight) + 'g',     colIdx: 4, bold: false },
-                    { text: String(rowQty),                colIdx: 5, bold: false },
-                    { text: fmtW(rg) + 'g',                colIdx: 6, bold: true  },
                 ]
                 : [
                     { text: it.design_number || '—',       colIdx: 0, bold: false },
                     { text: it.jewel_code    || '—',       colIdx: 1, bold: false },
                     { text: fmtW(it.gross_weight) + 'g',   colIdx: 2, bold: true  },
                     { text: fmtW(it.net_weight) + 'g',     colIdx: 3, bold: false },
-                    { text: String(rowQty),                colIdx: 4, bold: false },
-                    { text: fmtW(rg) + 'g',                colIdx: 5, bold: true  },
                 ];
+            const remarkColIdx = withImages ? 5 : 4;
 
             const cellY = y + (ROW_H > 18 ? (ROW_H - 10) / 2 : 5);
             doc.fontSize(8).fillColor('#333333');
@@ -160,6 +154,14 @@ async function generateQuotationPDF(quotation, party, items, options = {}) {
                        lineBreak: false,
                    });
             });
+            if (it.remark) {
+                doc.font('Helvetica-Oblique')
+                   .text(it.remark, cols[remarkColIdx] + 3, y + 4, {
+                       width: cols[remarkColIdx + 1] - cols[remarkColIdx] - 4,
+                       height: ROW_H - 6,
+                       ellipsis: true,
+                   });
+            }
 
             y += ROW_H;
         });
@@ -173,7 +175,7 @@ async function generateQuotationPDF(quotation, party, items, options = {}) {
 
         y += 14;
         [
-            ['Total Pieces:',       String(totalPcs)],
+            ['Total Items:',        String(items.length)],
             ['Total Gross Weight:', fmtW(totalGross) + 'g'],
             ['Total Net Weight:',   fmtW(totalNet)   + 'g'],
         ].forEach(([label, value]) => {
