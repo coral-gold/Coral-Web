@@ -2,19 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PublicLayout from '../../components/PublicLayout';
 import { useLightbox } from '../../components/ImageLightbox';
+import { useSiteContent } from '../../context/SiteContentContext';
 import api from '../../api';
 
 export default function Home() {
   const [featured, setFeatured] = useState([]);
-  const [content,  setContent]  = useState({});
+  const { content } = useSiteContent();
   const openImage = useLightbox();
 
   useEffect(() => {
-    api.get('/catalogue/preview').then(d => {
-      if (d.ok) setFeatured(d.categories.flatMap(c => c.products).slice(0, 4));
-    }).catch(() => {});
-    api.get('/public/content').then(d => {
-      if (d.ok) setContent(d.content);
+    api.get('/catalogue/featured').then(d => {
+      if (d.ok) setFeatured(d.products);
     }).catch(() => {});
   }, []);
 
@@ -60,11 +58,14 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Admin-curated Signature Items — hidden entirely until Admin marks at
+          least one product as Featured (Products page), rather than showing
+          an arbitrary/hardcoded selection. */}
       {featured.length > 0 && (
         <section className="section section-alt">
           <div className="container">
             <div className="section-title">
-              <h2>Featured Pieces</h2>
+              <h2>Signature Items</h2>
               <div className="gold-line" />
             </div>
             <div className="catalog-grid">

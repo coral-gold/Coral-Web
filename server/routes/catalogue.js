@@ -44,6 +44,33 @@ router.get('/preview', async (req, res) => {
     }
 });
 
+// GET /api/catalogue/featured — public, no login required.
+// Admin-curated "Signature Items" for the Home page (Batch 17 item 3) —
+// pulls whatever Admin has flagged is_featured on the Products page,
+// instead of an arbitrary slice of the preview teaser.
+const FEATURED_LIMIT = 8;
+
+router.get('/featured', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT id, design_number, image_path, description FROM products
+             WHERE active = 1 AND is_featured = 1
+             ORDER BY created_at DESC LIMIT ?`,
+            [FEATURED_LIMIT]
+        );
+        const products = rows.map(p => ({
+            id:          p.id,
+            designNo:    p.design_number,
+            image:       storage.getPublicUrl(p.image_path),
+            description: p.description,
+        }));
+        res.json({ ok: true, products });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ ok: false, error: 'Server error' });
+    }
+});
+
 // GET /api/catalogue?page=1&category=&search= — wholesaler-only, full
 // catalogue with real server-side pagination (same page/pages/total shape
 // as the admin panel, not infinite-scroll).

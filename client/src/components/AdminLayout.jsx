@@ -1,6 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSiteContent } from '../context/SiteContentContext';
+import { useToast } from './Toast';
+import api from '../api';
 
 const NAV = [
   { to: '/admin/dashboard',   label: 'Dashboard' },
@@ -13,9 +16,63 @@ const NAV = [
   { to: '/admin/media',       label: 'Media' },
 ];
 
+function ChangePasswordModal({ onClose }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword,     setNewPassword]     = useState('');
+  const [confirm,         setConfirm]         = useState('');
+  const [error,           setError]           = useState('');
+  const [saving,          setSaving]          = useState(false);
+  const { show } = useToast();
+
+  async function submit(e) {
+    e.preventDefault();
+    setError('');
+    if (newPassword !== confirm) { setError('New passwords do not match.'); return; }
+    setSaving(true);
+    const d = await api.post('/auth/admin/change-password', { currentPassword, newPassword });
+    setSaving(false);
+    if (d.ok) { show('Password changed'); onClose(); }
+    else setError(d.error || 'Failed to change password.');
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-box" style={{ maxWidth: 400 }}>
+        <h2>Change Password</h2>
+        <form onSubmit={submit}>
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="form-group">
+            <label>Current Password *</label>
+            <input className="form-control" type="password" required autoComplete="current-password"
+                   value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>New Password *</label>
+            <input className="form-control" type="password" required autoComplete="new-password"
+                   value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Confirm New Password *</label>
+            <input className="form-control" type="password" required autoComplete="new-password"
+                   value={confirm} onChange={e => setConfirm(e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-outline" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? <><span className="spinner" />Saving…</> : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminLayout({ children }) {
   const { admin, adminLogout, loading } = useAuth();
+  const { logoUrl } = useSiteContent();
   const navigate = useNavigate();
+  const [pwModal, setPwModal] = useState(false);
 
   useEffect(() => {
     if (!loading && !admin) navigate('/admin', { replace: true });
@@ -33,10 +90,13 @@ export default function AdminLayout({ children }) {
       <header className="admin-header">
         <div className="container">
           <NavLink className="logo" to="/admin/dashboard">
-            <img className="logo-img" src="/logo.png" alt="Coral Gold Admin" />
+            <img className="logo-img" src={logoUrl} alt="Coral Gold Admin" />
           </NavLink>
           <nav className="admin-header-nav">
             {NAV.map(n => <NavLink key={n.to} to={n.to}>{n.label}</NavLink>)}
+            <button onClick={() => setPwModal(true)} style={{ background: 'none', border: 'none', color: 'var(--mid)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
+              Change Password
+            </button>
             <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: 'var(--mid)', cursor: 'pointer', fontSize: '13px', fontWeight: 500 }}>
               Logout
             </button>
@@ -49,6 +109,7 @@ export default function AdminLayout({ children }) {
             {n.label}
           </NavLink>
         ))}
+        <button onClick={() => setPwModal(true)}>Password</button>
         <button onClick={handleLogout}>Logout</button>
       </nav>
       <div className="admin-layout">
@@ -61,6 +122,7 @@ export default function AdminLayout({ children }) {
         </nav>
         <main className="admin-main">{children}</main>
       </div>
+      {pwModal && <ChangePasswordModal onClose={() => setPwModal(false)} />}
     </div>
   );
 }

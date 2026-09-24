@@ -30,16 +30,20 @@ router.get('/jobs/:jobId', (req, res) => {
 
 router.get('/dashboard', async (req, res) => {
     try {
-        const [[{ products }]]    = await db.query('SELECT COUNT(*) AS products FROM products');
-        const [[{ categories }]]  = await db.query('SELECT COUNT(*) AS categories FROM categories');
-        const [[{ parties }]]     = await db.query('SELECT COUNT(*) AS parties FROM parties');
-        const [[{ quotations }]]  = await db.query('SELECT COUNT(*) AS quotations FROM quotations');
+        const [[{ products }]]       = await db.query('SELECT COUNT(*) AS products FROM products WHERE active = 1');
+        const [[{ categories }]]     = await db.query('SELECT COUNT(*) AS categories FROM categories');
+        const [[{ activeParties }]]  = await db.query('SELECT COUNT(*) AS activeParties FROM parties WHERE is_active = 1');
+        const [[{ quotations }]]     = await db.query('SELECT COUNT(*) AS quotations FROM quotations');
+        const [[{ quotationsThisMonth }]] = await db.query(
+            `SELECT COUNT(*) AS quotationsThisMonth FROM quotations
+             WHERE YEAR(created_at) = YEAR(CURDATE()) AND MONTH(created_at) = MONTH(CURDATE())`
+        );
         const [recent] = await db.query(
-            `SELECT q.quotation_number, q.created_at, p.company_name
+            `SELECT q.id, q.quotation_number, q.created_at, p.company_name
              FROM quotations q JOIN parties p ON p.id = q.party_id
              ORDER BY q.created_at DESC LIMIT 5`
         );
-        res.json({ ok: true, stats: { products, categories, parties, quotations }, recent });
+        res.json({ ok: true, stats: { products, categories, activeParties, quotations, quotationsThisMonth }, recent });
     } catch (e) { res.status(500).json({ ok: false }); }
 });
 
@@ -196,6 +200,24 @@ router.get('/products/:id', async (req, res) => {
     res.json({ ok: true, product: p });
 });
 
+// Add/Edit Product post FormData (for image upload), so a checked/unchecked
+// checkbox arrives as the string "true"/"false" — plain JS truthiness on a
+// string would treat "false" as true. Normalize both string and boolean
+// input here so it behaves the same from FormData or JSON.
+function toBool(v) {
+    return v === true || v === 'true' || v === '1' || v === 1;
+}
+
+// PATCH /products/:id/featured — one-click toggle from the products list,
+// without needing to open the full edit modal or resend every required field.
+router.patch('/products/:id/featured', async (req, res) => {
+    const [[p]] = await db.query('SELECT is_featured FROM products WHERE id = ?', [req.params.id]);
+    if (!p) return res.json({ ok: false, error: 'Product not found.' });
+    const next = p.is_featured ? 0 : 1;
+    await db.query('UPDATE products SET is_featured = ? WHERE id = ?', [next, req.params.id]);
+    res.json({ ok: true, is_featured: !!next });
+});
+
 // Returns a friendly message for genuine duplicate-key violations, otherwise
 // surfaces the real error — a hardcoded message on every failure previously
 // masked unrelated causes (image save failures, DB issues) as "duplicate".
@@ -216,7 +238,7 @@ router.post('/products', imageUpload.single('image'), async (req, res) => {
         const [r] = await db.query(
             'INSERT INTO products (category_id, design_number, jewel_code, gross_weight, net_weight, image_path, description, is_featured, amount) VALUES (?,?,?,?,?,?,?,?,?)',
             [category_id, design_number, jewel_code, gross_weight || null, net_weight || null,
-             imgPath, description || null, is_featured ? 1 : 0, amount || null]
+             imgPath, description || null, toBool(is_featured) ? 1 : 0, amount || null]
         );
         res.json({ ok: true, id: r.insertId });
     } catch (e) {
@@ -238,7 +260,7 @@ router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
         const sets = ['category_id=?', 'design_number=?', 'jewel_code=?', 'gross_weight=?', 'net_weight=?'];
         const vals = [category_id, design_number, jewel_code, gross_weight || null, net_weight || null];
         if (description !== undefined) { sets.push('description=?');  vals.push(description || null); }
-        if (is_featured !== undefined) { sets.push('is_featured=?');  vals.push(is_featured ? 1 : 0); }
+        if (is_featured !== undefined) { sets.push('is_featured=?');  vals.push(toBool(is_featured) ? 1 : 0); }
         if (amount      !== undefined) { sets.push('amount=?');       vals.push(amount || null); }
         if (req.file) {
             const imgPath = await saveImage(req.file);

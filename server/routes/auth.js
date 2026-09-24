@@ -106,4 +106,30 @@ router.post('/admin/logout', (req, res) => {
     req.session.destroy(() => res.json({ ok: true }));
 });
 
+// Self-service password change — the only way to change the admin password
+// today is re-running the /setup DB wizard, which is a poor fit for routine
+// credential rotation.
+router.post('/admin/change-password', async (req, res) => {
+    if (!req.session.adminId) return res.status(401).json({ ok: false, error: 'Not logged in.' });
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        return res.json({ ok: false, error: 'Current and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+        return res.json({ ok: false, error: 'New password must be at least 6 characters.' });
+    }
+    try {
+        const [[admin]] = await db.query('SELECT * FROM admins WHERE id = ?', [req.session.adminId]);
+        if (!admin || !await bcrypt.compare(currentPassword, admin.password_hash)) {
+            return res.json({ ok: false, error: 'Current password is incorrect.' });
+        }
+        const hash = await bcrypt.hash(newPassword, 10);
+        await db.query('UPDATE admins SET password_hash = ? WHERE id = ?', [hash, admin.id]);
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[admin/change-password]', e.message);
+        res.json({ ok: false, error: dbErrorMessage(e) });
+    }
+});
+
 module.exports = router;

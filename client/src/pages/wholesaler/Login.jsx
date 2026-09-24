@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSiteContent } from '../../context/SiteContentContext';
 
 export default function WholesalerLogin() {
+  const { logoUrl } = useSiteContent();
   const [partyId,   setPartyId]   = useState('');
   const [password,  setPassword]  = useState('');
   const [error,     setError]     = useState('');
@@ -29,7 +31,7 @@ export default function WholesalerLogin() {
     <div className="section-wholesaler" style={{ minHeight: '100vh', background: 'linear-gradient(160deg, var(--pink-pale) 0%, var(--off-white) 60%)' }}>
       <div className="login-wrap">
         <div className="login-box">
-          <img className="logo-img" src="/logo.png" alt="Coral Gold" style={{ height: 46, margin: '0 auto 6px' }} />
+          <img className="logo-img" src={logoUrl} alt="Coral Gold" style={{ height: 46, margin: '0 auto 6px' }} />
           <h2>Wholesaler Portal</h2>
           {error && (
             <div className="alert alert-error">

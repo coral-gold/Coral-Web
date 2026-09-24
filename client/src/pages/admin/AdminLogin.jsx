@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useSiteContent } from '../../context/SiteContentContext';
 
 export default function AdminLogin() {
+  const { logoUrl } = useSiteContent();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState('');
@@ -29,7 +31,7 @@ export default function AdminLogin() {
     <div className="section-wholesaler" style={{ minHeight: '100vh', background: 'linear-gradient(160deg, var(--pink-pale) 0%, var(--off-white) 60%)' }}>
       <div className="admin-login-wrap">
         <div className="admin-login-box">
-          <img className="logo-img" src="/logo.png" alt="Coral Gold" />
+          <img className="logo-img" src={logoUrl} alt="Coral Gold" />
           <h1>Admin Panel</h1>
           {error && (
             <div className="alert alert-error">

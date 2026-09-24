@@ -5,7 +5,7 @@ import { useToast } from '../../components/Toast';
 import { useLightbox } from '../../components/ImageLightbox';
 import api from '../../api';
 
-const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', amount: '', description: '' };
+const EMPTY = { design_number: '', jewel_code: '', category_id: '', gross_weight: '', net_weight: '', amount: '', description: '', is_featured: false };
 
 function Th({ col, sort, onSort, children }) {
   const active = sort.col === col;
@@ -101,6 +101,7 @@ export default function Products() {
       net_weight:    p.net_weight    || '',
       amount:        p.amount        || '',
       description:   p.description   || '',
+      is_featured:   !!p.is_featured,
     });
     setEditId(p.id); setImageFile(null); setEditImageUrl(p.image_url || null); setModal(true);
   }
@@ -109,7 +110,7 @@ export default function Products() {
     e.preventDefault();
     setSaving(true);
     const fd = new FormData();
-    Object.entries(form).forEach(([k, v]) => fd.append(k, v ?? ''));
+    Object.entries(form).forEach(([k, v]) => fd.append(k, k === 'is_featured' ? (v ? '1' : '0') : (v ?? '')));
     if (imageFile) fd.append('image', imageFile);
     const d = editId
       ? await api.formPut(`/admin/products/${editId}`, fd)
@@ -129,6 +130,14 @@ export default function Products() {
   }
 
   const setF = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  async function toggleFeatured(p) {
+    const d = await api.patch(`/admin/products/${p.id}/featured`);
+    if (d.ok) {
+      setProducts(prev => prev.map(row => row.id === p.id ? { ...row, is_featured: d.is_featured ? 1 : 0 } : row));
+      show(d.is_featured ? 'Marked as Featured' : 'Removed from Featured');
+    } else show('Failed', 'error');
+  }
 
   // ── Quick edit ────────────────────────────────────────────────────────────
 
@@ -299,12 +308,13 @@ export default function Products() {
               <Th col="category_name" sort={sort} onSort={handleSort}>Category</Th>
               <Th col="gross_weight"  sort={sort} onSort={handleSort}>Gross Wt.</Th>
               <Th col="net_weight"    sort={sort} onSort={handleSort}>Net Wt.</Th>
+              <th title="Shown in the Home page's Signature Items section">Featured</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {products.length === 0 && (
-              <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No products yet.</td></tr>
+              <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No products yet.</td></tr>
             )}
             {products.map(p => (
               <React.Fragment key={p.id}>
@@ -322,6 +332,15 @@ export default function Products() {
                   <td>{p.category_name}</td>
                   <td>{p.gross_weight ? parseFloat(p.gross_weight).toFixed(3) + 'g' : '—'}</td>
                   <td>{p.net_weight   ? parseFloat(p.net_weight).toFixed(3)   + 'g' : '—'}</td>
+                  <td>
+                    <button
+                      type="button" onClick={() => toggleFeatured(p)}
+                      title={p.is_featured ? 'Remove from Signature Items' : 'Show in Signature Items on Home page'}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: 2, color: p.is_featured ? 'var(--secondary)' : '#ccc' }}
+                    >
+                      {p.is_featured ? '★' : '☆'}
+                    </button>
+                  </td>
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <button className="btn btn-sm btn-outline" onClick={() => openEdit(p)} style={{ marginRight: 4 }}>Edit</button>
                     <button className="btn btn-sm btn-outline" onClick={() => qeId === p.id ? setQeId(null) : openQe(p)} style={{ marginRight: 4 }}>
@@ -334,7 +353,7 @@ export default function Products() {
                 {/* Quick Edit inline row */}
                 {qeId === p.id && (
                   <tr style={{ background: 'var(--cream)' }}>
-                    <td colSpan={8} style={{ padding: '10px 14px' }}>
+                    <td colSpan={9} style={{ padding: '10px 14px' }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                         <div className="form-group" style={{ margin: 0, minWidth: 130 }}>
                           <label style={{ fontSize: 11 }}>Category</label>
@@ -419,6 +438,16 @@ export default function Products() {
               <div className="form-group">
                 <label>Description</label>
                 <textarea className="form-control" rows={2} value={form.description} onChange={setF('description')} />
+              </div>
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox" checked={!!form.is_featured}
+                    onChange={e => setForm(f => ({ ...f, is_featured: e.target.checked }))}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  Featured — show in "Signature Items" on the Home page
+                </label>
               </div>
               <div className="form-group">
                 <label>Image {editId && <span style={{ color: 'var(--mid)', fontWeight: 400 }}>(leave blank to keep current)</span>}</label>

@@ -10,6 +10,11 @@ async function runMigrations() {
     try {
         await addColumnIfMissing('products', 'active', "TINYINT NOT NULL DEFAULT 1");
         await ensureIndex('products', 'idx_active', '(active)');
+        // Admin-curated "Signature Items" flag for the Home page (Batch 17) —
+        // already in schema.sql for new installs, but an existing production
+        // DB needs it added explicitly.
+        await addColumnIfMissing('products', 'is_featured', "TINYINT DEFAULT 0");
+        await ensureIndex('products', 'idx_featured', '(is_featured)');
         // Static per-product diamond/stone amount (e.g. "2.5ct", "12 pcs") —
         // distinct from order quantity, which is being removed in favor of remark.
         await addColumnIfMissing('products', 'amount', "VARCHAR(50) NULL");

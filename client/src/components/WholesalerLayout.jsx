@@ -2,11 +2,13 @@ import React, { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useSiteContent } from '../context/SiteContentContext';
 import QuotationPanel from './QuotationPanel';
 
 export default function WholesalerLayout({ children }) {
   const { party, partyLogout, loading } = useAuth();
   const { cart, refresh, setPanelOpen, panelOpen } = useCart();
+  const { logoUrl } = useSiteContent();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export default function WholesalerLayout({ children }) {
       <header className="site-header">
         <div className="container">
           <Link className="logo" to="/wholesaler/catalogue">
-            <img className="logo-img" src="/logo.png" alt="Coral Gold" />
+            <img className="logo-img" src={logoUrl} alt="Coral Gold" />
           </Link>
           <nav>
             <Link to="/wholesaler/catalogue">Catalogue</Link>

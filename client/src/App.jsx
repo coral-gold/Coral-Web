@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { SiteContentProvider } from './context/SiteContentContext';
 import { ToastProvider } from './components/Toast';
 import { ImageLightboxProvider } from './components/ImageLightbox';
 import LoadingBar from './components/LoadingBar';
@@ -58,6 +59,7 @@ function SetupGate({ children }) {
 
 export default function App() {
   return (
+    <SiteContentProvider>
     <AuthProvider>
       <ToastProvider>
         <ImageLightboxProvider>
@@ -93,5 +95,6 @@ export default function App() {
         </ImageLightboxProvider>
       </ToastProvider>
     </AuthProvider>
+    </SiteContentProvider>
   );
 }
