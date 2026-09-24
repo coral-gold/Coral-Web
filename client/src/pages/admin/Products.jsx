@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import AdminLayout from '../../components/AdminLayout';
+import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
 
@@ -21,7 +22,9 @@ export default function Products() {
   const [products,      setProducts]      = useState([]);
   const [categories,    setCategories]    = useState([]);
   const [page,          setPage]          = useState(1);
-  const [hasMore,       setHasMore]       = useState(false);
+  const [pages,         setPages]         = useState(1);
+  const [total,         setTotal]         = useState(0);
+  const [loading,       setLoading]       = useState(false);
   const [search,        setSearch]        = useState('');
   const [sort,          setSort]          = useState({ col: 'design_number', dir: 'asc' });
   const [modal,         setModal]         = useState(false);
@@ -42,33 +45,42 @@ export default function Products() {
   const debounce = useRef(null);
 
   // ── Data loading ──────────────────────────────────────────────────────────
+  // Real server-side pagination: always fetches and renders exactly one page
+  // (25 rows) at a time — never accumulates the whole catalog client-side.
 
-  async function load(reset = false, sortOpts) {
-    const p = reset ? 1 : page;
-    const s = sortOpts || sort;
+  async function load(p, s) {
+    setLoading(true);
     const d = await api.get(`/admin/products?page=${p}&q=${encodeURIComponent(search)}&sort=${s.col}&order=${s.dir}`);
+    setLoading(false);
     if (d.ok) {
-      setProducts(prev => reset ? d.products : [...prev, ...d.products]);
-      setHasMore(d.hasMore || false);
-      setPage(p + 1);
+      // A delete/bulk-delete can empty out the last page — step back one page automatically.
+      if (d.products.length === 0 && p > 1) return load(p - 1, s);
+      setProducts(d.products);
+      setPage(p);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+      setSelected(new Set());
     }
   }
 
   function handleSort(col) {
     const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
     setSort(newSort);
-    setPage(1);
-    load(true, newSort);
+    load(1, newSort);
+  }
+
+  function goToPage(p) {
+    load(p, sort);
   }
 
   useEffect(() => {
-    api.get('/admin/categories').then(d => { if (d.ok) setCategories(d.categories); });
-    load(true);
+    api.get('/admin/categories?all=1').then(d => { if (d.ok) setCategories(d.categories); });
+    load(1, sort);
   }, []);
 
   useEffect(() => {
     clearTimeout(debounce.current);
-    debounce.current = setTimeout(() => { setPage(1); load(true); }, 350);
+    debounce.current = setTimeout(() => { load(1, sort); }, 350);
   }, [search]);
 
   // ── Full edit modal ───────────────────────────────────────────────────────
@@ -96,14 +108,14 @@ export default function Products() {
       ? await api.formPut(`/admin/products/${editId}`, fd)
       : await api.form('/admin/products', fd);
     setSaving(false);
-    if (d.ok) { setModal(false); setPage(1); load(true); show(editId ? 'Updated' : 'Product added'); }
+    if (d.ok) { setModal(false); load(editId ? page : 1, sort); show(editId ? 'Updated' : 'Product added'); }
     else show(d.error || 'Failed', 'error');
   }
 
   async function del(id) {
     if (!confirm('Delete this product?')) return;
     const d = await api.del(`/admin/products/${id}`);
-    if (d.ok) { setPage(1); load(true); show('Deleted'); }
+    if (d.ok) { load(page, sort); show('Deleted'); }
     else show(d.error || 'Failed', 'error');
   }
 
@@ -128,7 +140,7 @@ export default function Products() {
     Object.entries(qeForm).forEach(([k, v]) => fd.append(k, v ?? ''));
     const d = await api.formPut(`/admin/products/${id}`, fd);
     setQeSaving(false);
-    if (d.ok) { setQeId(null); setPage(1); load(true); show('Saved'); }
+    if (d.ok) { setQeId(null); load(page, sort); show('Saved'); }
     else show(d.error || 'Failed', 'error');
   }
 
@@ -168,11 +180,9 @@ export default function Products() {
     const d = await api.post('/admin/products/bulk', payload);
     setBulkSaving(false);
     if (d.ok) {
-      setSelected(new Set());
       setBulkAction('');
       setBulkCatId('');
-      setPage(1);
-      load(true);
+      load(page, sort);
       show(`Done: ${d.affected} product(s) updated.`);
     } else {
       show(d.error || 'Failed', 'error');
@@ -313,11 +323,7 @@ export default function Products() {
         </table>
       </div>
 
-      {hasMore && (
-        <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <button className="btn btn-outline" onClick={() => load(false)}>Load More</button>
-        </div>
-      )}
+      <Pagination page={page} pages={pages} total={total} onChange={p => goToPage(p)} />
 
       {modal && (
         <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setModal(false); }}>

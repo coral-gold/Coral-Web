@@ -44,11 +44,35 @@ router.get('/dashboard', async (req, res) => {
 
 // ── Categories ─────────────────────────────────────────────────────────────────
 
+// ?all=1 returns the full unpaginated list — used by dropdowns/pickers
+// (Add/Edit Product category select, bulk change-category, merge modal)
+// which need every option visible, not just one page of them.
+const CATEGORY_SORT_COLS = { name: 'c.name', product_count: 'product_count' };
+
 router.get('/categories', async (req, res) => {
-    const [rows] = await db.query(
-        'SELECT c.*, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON p.category_id = c.id GROUP BY c.id ORDER BY c.name'
-    );
-    res.json({ ok: true, categories: rows });
+    try {
+        if (req.query.all === '1') {
+            const [rows] = await db.query(
+                'SELECT c.*, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON p.category_id = c.id GROUP BY c.id ORDER BY c.name'
+            );
+            return res.json({ ok: true, categories: rows });
+        }
+        const page    = Math.max(1, parseInt(req.query.page) || 1);
+        const per     = 25;
+        const offset  = (page - 1) * per;
+        const sortCol = CATEGORY_SORT_COLS[req.query.sort] || 'c.name';
+        const sortDir = req.query.order === 'desc' ? 'DESC' : 'ASC';
+        const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM categories');
+        const [rows] = await db.query(
+            `SELECT c.*, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON p.category_id = c.id
+             GROUP BY c.id ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
+            [per, offset]
+        );
+        res.json({ ok: true, categories: rows, total, pages: Math.max(1, Math.ceil(total / per)) });
+    } catch (e) {
+        console.error('[categories list]', e);
+        res.status(500).json({ ok: false, error: e.message });
+    }
 });
 
 router.post('/categories', async (req, res) => {
@@ -58,7 +82,8 @@ router.post('/categories', async (req, res) => {
         const [r] = await db.query('INSERT INTO categories (name) VALUES (?)', [name]);
         res.json({ ok: true, id: r.insertId });
     } catch (e) {
-        res.json({ ok: false, error: 'Category name already exists.' });
+        console.error('[categories add]', e);
+        res.json({ ok: false, error: e.code === 'ER_DUP_ENTRY' ? 'Category name already exists.' : e.message });
     }
 });
 
@@ -66,16 +91,24 @@ router.put('/categories/:id', async (req, res) => {
     const name = (req.body.name || '').trim();
     if (!name) return res.json({ ok: false, error: 'Name required.' });
     try {
-        await db.query('UPDATE categories SET name = ? WHERE id = ?', [name, req.params.id]);
+        const [r] = await db.query('UPDATE categories SET name = ? WHERE id = ?', [name, req.params.id]);
+        if (r.affectedRows === 0) return res.json({ ok: false, error: 'Category not found.' });
         res.json({ ok: true });
-    } catch (e) { res.json({ ok: false, error: 'Name already exists.' }); }
+    } catch (e) {
+        console.error('[categories edit]', e);
+        res.json({ ok: false, error: e.code === 'ER_DUP_ENTRY' ? 'Name already exists.' : e.message });
+    }
 });
 
 router.delete('/categories/:id', async (req, res) => {
     try {
         await db.query('DELETE FROM categories WHERE id = ?', [req.params.id]);
         res.json({ ok: true });
-    } catch (e) { res.json({ ok: false, error: 'Cannot delete — products exist in this category.' }); }
+    } catch (e) {
+        console.error('[categories delete]', e);
+        res.json({ ok: false, error: e.code === 'ER_ROW_IS_REFERENCED_2' || e.code === 'ER_ROW_IS_REFERENCED'
+            ? 'Cannot delete — products exist in this category.' : e.message });
+    }
 });
 
 // POST /admin/categories/merge  { targetId, sourceIds: [id, ...] }
@@ -131,7 +164,7 @@ router.get('/products', async (req, res) => {
             `SELECT p.*, c.name AS category_name FROM products p JOIN categories c ON c.id = p.category_id ${where} ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
-        res.json({ ok: true, products: rows, total, pages: Math.ceil(total / per), hasMore: offset + rows.length < total });
+        res.json({ ok: true, products: rows, total, pages: Math.max(1, Math.ceil(total / per)), hasMore: offset + rows.length < total });
     } catch (e) { res.status(500).json({ ok: false }); }
 });
 
@@ -140,6 +173,16 @@ router.get('/products/:id', async (req, res) => {
     if (!p) return res.status(404).json({ ok: false });
     res.json({ ok: true, product: p });
 });
+
+// Returns a friendly message for genuine duplicate-key violations, otherwise
+// surfaces the real error — a hardcoded message on every failure previously
+// masked unrelated causes (image save failures, DB issues) as "duplicate".
+function productSaveError(e, action) {
+    console.error(`[products ${action}]`, e);
+    if (e.code === 'ER_DUP_ENTRY') return 'Design Number or Jewel Code already exists.';
+    if (e.code === 'ER_NO_REFERENCED_ROW' || e.code === 'ER_NO_REFERENCED_ROW_2') return 'Selected category does not exist.';
+    return `Failed to save product: ${e.message}`;
+}
 
 router.post('/products', imageUpload.single('image'), async (req, res) => {
     const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured } = req.body;
@@ -155,31 +198,46 @@ router.post('/products', imageUpload.single('image'), async (req, res) => {
         );
         res.json({ ok: true, id: r.insertId });
     } catch (e) {
-        res.json({ ok: false, error: 'Design Number or Jewel Code already exists.' });
+        res.json({ ok: false, error: productSaveError(e, 'add') });
     }
 });
 
+// Only updates fields actually present in the request body. This matters
+// because Quick Edit intentionally sends a subset of fields (Category,
+// Design No., Jewel Code, Gross/Net Wt.) — previously any omitted field
+// (description, is_featured) was silently overwritten with NULL/0 on every
+// save, corrupting data without any error being shown.
 router.put('/products/:id', imageUpload.single('image'), async (req, res) => {
     const { category_id, design_number, jewel_code, gross_weight, net_weight, description, is_featured } = req.body;
     if (!category_id || !design_number || !jewel_code) {
         return res.json({ ok: false, error: 'Category, Design Number and Jewel Code are required.' });
     }
     try {
-        const sets  = ['category_id=?','design_number=?','jewel_code=?','gross_weight=?','net_weight=?','description=?','is_featured=?'];
-        const vals  = [category_id, design_number, jewel_code, gross_weight || null, net_weight || null,
-                       description || null, is_featured ? 1 : 0];
+        const sets = ['category_id=?', 'design_number=?', 'jewel_code=?', 'gross_weight=?', 'net_weight=?'];
+        const vals = [category_id, design_number, jewel_code, gross_weight || null, net_weight || null];
+        if (description !== undefined) { sets.push('description=?');  vals.push(description || null); }
+        if (is_featured !== undefined) { sets.push('is_featured=?');  vals.push(is_featured ? 1 : 0); }
         if (req.file) {
             const imgPath = await saveImage(req.file);
             sets.push('image_path=?'); vals.push(imgPath);
         }
-        await db.query(`UPDATE products SET ${sets.join(',')} WHERE id = ?`, [...vals, req.params.id]);
+        const [r] = await db.query(`UPDATE products SET ${sets.join(',')} WHERE id = ?`, [...vals, req.params.id]);
+        if (r.affectedRows === 0) return res.json({ ok: false, error: 'Product not found.' });
         res.json({ ok: true });
-    } catch (e) { res.json({ ok: false, error: 'Design Number or Jewel Code already exists.' }); }
+    } catch (e) {
+        res.json({ ok: false, error: productSaveError(e, 'edit') });
+    }
 });
 
 router.delete('/products/:id', async (req, res) => {
-    await db.query('DELETE FROM products WHERE id = ?', [req.params.id]);
-    res.json({ ok: true });
+    try {
+        const [r] = await db.query('DELETE FROM products WHERE id = ?', [req.params.id]);
+        if (r.affectedRows === 0) return res.json({ ok: false, error: 'Product not found.' });
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[products delete]', e);
+        res.json({ ok: false, error: 'Failed to delete product: ' + e.message });
+    }
 });
 
 // ── Bulk product actions ───────────────────────────────────────────────────────
@@ -295,8 +353,15 @@ router.post('/import/preview', xlsxUpload.single('file'), async (req, res) => {
 
 // ── Media Library ──────────────────────────────────────────────────────────────
 
+const MEDIA_SORT_COLS = ['filename', 'size', 'mtime'];
+
 router.get('/media', (req, res) => {
     try {
+        const page    = Math.max(1, parseInt(req.query.page) || 1);
+        const per     = 25;
+        const sortCol = MEDIA_SORT_COLS.includes(req.query.sort) ? req.query.sort : 'mtime';
+        const sortDir = req.query.order === 'asc' ? 1 : -1;
+
         const IMAGE_RE = /\.(jpe?g|png|gif|webp|svg)$/i;
         const files = fs.readdirSync(UPLOAD_DIR)
             .filter(f => IMAGE_RE.test(f) && f !== '.gitkeep')
@@ -304,9 +369,20 @@ router.get('/media', (req, res) => {
                 const stat = fs.statSync(path.join(UPLOAD_DIR, f));
                 return { filename: f, url: '/uploads/' + f, size: stat.size, mtime: stat.mtimeMs };
             })
-            .sort((a, b) => b.mtime - a.mtime);
-        res.json({ ok: true, files });
-    } catch (e) { res.json({ ok: false, error: e.message }); }
+            .sort((a, b) => {
+                let va = a[sortCol], vb = b[sortCol];
+                if (typeof va === 'string') { va = va.toLowerCase(); vb = vb.toLowerCase(); }
+                const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+                return cmp * sortDir;
+            });
+
+        const total  = files.length;
+        const offset = (page - 1) * per;
+        res.json({ ok: true, files: files.slice(offset, offset + per), total, pages: Math.max(1, Math.ceil(total / per)) });
+    } catch (e) {
+        console.error('[media list]', e);
+        res.json({ ok: false, error: e.message });
+    }
 });
 
 router.delete('/media/:filename', (req, res) => {
@@ -557,7 +633,7 @@ router.get('/parties', async (req, res) => {
         `SELECT id, party_id, company_name, phone, is_active, created_at FROM parties ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
         [per, offset]
     );
-    res.json({ ok: true, parties: rows, total, pages: Math.ceil(total / per) });
+    res.json({ ok: true, parties: rows, total, pages: Math.max(1, Math.ceil(total / per)) });
 });
 
 router.post('/parties', async (req, res) => {
@@ -573,7 +649,10 @@ router.post('/parties', async (req, res) => {
             [party_id, company_name, phone || null, is_active ? 1 : 1, hash]
         );
         res.json({ ok: true, id: r.insertId });
-    } catch (e) { res.json({ ok: false, error: 'Party ID already exists.' }); }
+    } catch (e) {
+        console.error('[parties add]', e);
+        res.json({ ok: false, error: e.code === 'ER_DUP_ENTRY' ? 'Party ID already exists.' : e.message });
+    }
 });
 
 router.put('/parties/:id', async (req, res) => {
@@ -595,14 +674,21 @@ router.put('/parties/:id', async (req, res) => {
             [party_id, company_name, phone || null, is_active ? 1 : 0, hash, req.params.id]
         );
         res.json({ ok: true });
-    } catch (e) { res.json({ ok: false, error: 'Party ID already exists.' }); }
+    } catch (e) {
+        console.error('[parties edit]', e);
+        res.json({ ok: false, error: e.code === 'ER_DUP_ENTRY' ? 'Party ID already exists.' : e.message });
+    }
 });
 
 router.delete('/parties/:id', async (req, res) => {
     try {
         await db.query('DELETE FROM parties WHERE id = ?', [req.params.id]);
         res.json({ ok: true });
-    } catch (e) { res.json({ ok: false, error: 'Cannot delete party.' }); }
+    } catch (e) {
+        console.error('[parties delete]', e);
+        res.json({ ok: false, error: e.code === 'ER_ROW_IS_REFERENCED_2' || e.code === 'ER_ROW_IS_REFERENCED'
+            ? 'Cannot delete — this party has existing quotations.' : e.message });
+    }
 });
 
 router.patch('/parties/:id/toggle', async (req, res) => {
@@ -649,7 +735,7 @@ router.get('/quotations', async (req, res) => {
              ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
-        res.json({ ok: true, quotations: rows, total, pages: Math.ceil(total / per) });
+        res.json({ ok: true, quotations: rows, total, pages: Math.max(1, Math.ceil(total / per)) });
     } catch (e) { console.error(e); res.status(500).json({ ok: false }); }
 });
 

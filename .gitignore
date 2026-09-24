@@ -1,6 +1,7 @@
 # Never commit credentials
 includes/config.php
 .env
+server/config.json
 
 # Node
 node_modules/

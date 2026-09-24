@@ -5,11 +5,26 @@ const fs     = require('fs');
 
 // Set UPLOAD_DIR env var to a path OUTSIDE the app directory (e.g. /home/u123456/uploads)
 // so images survive git-pull deployments. Defaults to assets/uploads inside the repo.
-const UPLOAD_DIR = process.env.UPLOAD_DIR
+const DEFAULT_UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
+let UPLOAD_DIR = process.env.UPLOAD_DIR
     ? path.resolve(process.env.UPLOAD_DIR)
-    : path.join(__dirname, '../../assets/uploads');
+    : DEFAULT_UPLOAD_DIR;
 
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// A bad UPLOAD_DIR (unwritable / invalid path) must never crash the whole
+// app at require() time — fall back to the in-repo default so every other
+// route still works, and log loudly so the misconfiguration is visible.
+try {
+    if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    fs.accessSync(UPLOAD_DIR, fs.constants.W_OK);
+} catch (e) {
+    console.error(`[Uploads] UPLOAD_DIR "${UPLOAD_DIR}" is not usable (${e.message}). Falling back to ${DEFAULT_UPLOAD_DIR}.`);
+    UPLOAD_DIR = DEFAULT_UPLOAD_DIR;
+    try {
+        if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    } catch (e2) {
+        console.error('[Uploads] Fallback upload dir also failed:', e2.message);
+    }
+}
 
 const imageUpload = multer({
     storage: multer.memoryStorage(),

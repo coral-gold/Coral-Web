@@ -85,6 +85,16 @@ CREATE TABLE IF NOT EXISTS content (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- Login sessions, persisted here (not in server memory) so an admin/party
+-- stays logged in across app restarts and works correctly with multiple
+-- worker processes. Also created lazily by server/sessionStore.js if missing.
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id VARCHAR(128) PRIMARY KEY,
+    data LONGTEXT NOT NULL,
+    expires BIGINT NOT NULL,
+    INDEX idx_expires (expires)
+);
+
 -- Default content values
 INSERT IGNORE INTO content (key_name, value) VALUES
     ('home_hero_title', 'Premium Gold Jewellery'),

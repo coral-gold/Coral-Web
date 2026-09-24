@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import AdminLayout from '../../components/AdminLayout';
+import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
 
@@ -25,18 +26,28 @@ function SortTh({ col, sort, onSort, children }) {
 
 function LibraryTab() {
   const [files,     setFiles]    = useState([]);
+  const [page,      setPage]     = useState(1);
+  const [pages,     setPages]    = useState(1);
+  const [total,     setTotal]    = useState(0);
   const [sort,      setSort]     = useState({ col: 'mtime', dir: 'desc' });
   const [uploading, setUploading]= useState(false);
   const [copied,    setCopied]   = useState(null);
   const { show } = useToast();
   const uploadRef = useRef(null);
 
-  async function load() {
-    const d = await api.get('/admin/media');
-    if (d.ok) setFiles(d.files);
+  // Real server-side pagination: fetch and render one page at a time.
+  async function load(p = page, s = sort) {
+    const d = await api.get(`/admin/media?page=${p}&sort=${s.col}&order=${s.dir}`);
+    if (d.ok) {
+      if (d.files.length === 0 && p > 1) return load(p - 1, s);
+      setFiles(d.files);
+      setPage(p);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(1, sort); }, []);
 
   async function handleUpload(e) {
     const file = e.target.files?.[0];
@@ -46,7 +57,7 @@ function LibraryTab() {
     fd.append('image', file);
     const d = await api.form('/admin/content/logo', fd);
     setUploading(false);
-    if (d.ok) { show('Uploaded'); load(); }
+    if (d.ok) { show('Uploaded'); load(1, sort); }
     else show(d.error || 'Upload failed', 'error');
     e.target.value = '';
   }
@@ -54,7 +65,7 @@ function LibraryTab() {
   async function del(filename) {
     if (!confirm(`Delete "${filename}"? This cannot be undone.`)) return;
     const d = await api.del(`/admin/media/${encodeURIComponent(filename)}`);
-    if (d.ok) { show('Deleted'); load(); }
+    if (d.ok) { show('Deleted'); load(page, sort); }
     else show(d.error || 'Failed', 'error');
   }
 
@@ -67,15 +78,10 @@ function LibraryTab() {
   }
 
   function handleSort(col) {
-    setSort(s => ({ col, dir: s.col === col && s.dir === 'asc' ? 'desc' : 'asc' }));
+    const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
+    setSort(newSort);
+    load(1, newSort);
   }
-
-  const sorted = [...files].sort((a, b) => {
-    let va = a[sort.col], vb = b[sort.col];
-    if (typeof va === 'string') va = va.toLowerCase(), vb = vb.toLowerCase();
-    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-    return sort.dir === 'asc' ? cmp : -cmp;
-  });
 
   return (
     <>
@@ -101,10 +107,10 @@ function LibraryTab() {
             </tr>
           </thead>
           <tbody>
-            {sorted.length === 0 && (
+            {files.length === 0 && (
               <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No images uploaded yet.</td></tr>
             )}
-            {sorted.map(f => (
+            {files.map(f => (
               <tr key={f.filename}>
                 <td>
                   <img src={f.url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, display: 'block' }}
@@ -129,6 +135,8 @@ function LibraryTab() {
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, sort)} />
     </>
   );
 }

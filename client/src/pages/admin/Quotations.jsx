@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
+import Pagination from '../../components/Pagination';
 import api from '../../api';
 
 function Th({ col, sort, onSort, children }) {
@@ -17,31 +18,42 @@ function Th({ col, sort, onSort, children }) {
 
 export default function AdminQuotations() {
   const [quotations, setQuotations] = useState([]);
+  const [page,       setPage]       = useState(1);
+  const [pages,      setPages]      = useState(1);
+  const [total,      setTotal]      = useState(0);
   const [from,       setFrom]       = useState('');
   const [to,         setTo]         = useState('');
   const [sort,       setSort]       = useState({ col: 'created_at', dir: 'desc' });
   const [loading,    setLoading]    = useState(false);
 
+  // Real server-side pagination: fetch and render one page at a time.
   async function load(opts = {}) {
     setLoading(true);
+    const p = opts.page || 1;
     const s = opts.sort || sort;
     const params = new URLSearchParams();
     if (from) params.set('date_from', from);
     if (to)   params.set('date_to', to);
+    params.set('page', p);
     params.set('sort', s.col);
     params.set('order', s.dir);
     const d = await api.get(`/admin/quotations?${params}`);
-    if (d.ok) setQuotations(d.quotations);
     setLoading(false);
+    if (d.ok) {
+      setQuotations(d.quotations);
+      setPage(p);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
   }
 
   function handleSort(col) {
     const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
     setSort(newSort);
-    load({ sort: newSort });
+    load({ page: 1, sort: newSort });
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load({ page: 1 }); }, []);
 
   function openPdf(id, mode) {
     window.open(`/api/admin/quotations/${id}/pdf?mode=${mode}`, '_blank');
@@ -60,8 +72,8 @@ export default function AdminQuotations() {
           <label style={{ fontSize: 12 }}>To</label>
           <input type="date" className="form-control form-control-sm" value={to} onChange={e => setTo(e.target.value)} />
         </div>
-        <button className="btn btn-primary btn-sm" onClick={() => load()} disabled={loading}>Filter</button>
-        <button className="btn btn-outline btn-sm" onClick={() => { setFrom(''); setTo(''); setTimeout(() => load(), 0); }}>Clear</button>
+        <button className="btn btn-primary btn-sm" onClick={() => load({ page: 1 })} disabled={loading}>Filter</button>
+        <button className="btn btn-outline btn-sm" onClick={() => { setFrom(''); setTo(''); setTimeout(() => load({ page: 1 }), 0); }}>Clear</button>
       </div>
 
       {loading && <p style={{ color: 'var(--mid)' }}>Loading…</p>}
@@ -100,6 +112,8 @@ export default function AdminQuotations() {
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} pages={pages} total={total} onChange={p => load({ page: p, sort })} />
     </AdminLayout>
   );
 }

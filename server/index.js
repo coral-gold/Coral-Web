@@ -9,7 +9,13 @@ const app = express();
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
+// Persistent, DB-backed session store — survives process restarts and works
+// correctly across multiple worker processes (Express's default MemoryStore
+// does neither, which is what caused spurious "Admin login required" prompts
+// on an already-logged-in admin).
+const MySQLSessionStore = require('./sessionStore');
 app.use(session({
+    store:             new MySQLSessionStore(),
     secret:            process.env.SESSION_SECRET || 'cg-dev-secret-change-in-prod',
     resave:            false,
     saveUninitialized: false,
@@ -31,10 +37,25 @@ app.use('/api/cart',      require('./routes/cart'));
 app.use('/api/quotation', require('./routes/quotation'));
 app.use('/api/admin',     require('./routes/admin'));
 
-// Serve React production build
+// Serve React production build.
+// index.html must never be cached — each build ships a fresh content-hashed
+// JS/CSS filename and deletes the old one, so a cached index.html pointing
+// at a bundle that no longer exists breaks the SPA (looks like "navigation
+// keeps reloading / breaking" until the admin does a hard refresh).
+// The hashed asset files themselves are safe to cache long-term.
 const distDir = path.join(__dirname, '../client/dist');
-app.use(express.static(distDir));
-app.get(/.*/, (req, res) => res.sendFile(path.join(distDir, 'index.html')));
+app.use(express.static(distDir, {
+    index: false,
+    setHeaders: (res, filePath) => {
+        if (path.basename(filePath) === 'index.html') {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+    }
+}));
+app.get(/.*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(distDir, 'index.html'));
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {

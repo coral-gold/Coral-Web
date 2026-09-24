@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
+import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
 
@@ -19,6 +20,9 @@ function Th({ col, sort, onSort, children }) {
 
 export default function Parties() {
   const [parties, setParties] = useState([]);
+  const [page,    setPage]    = useState(1);
+  const [pages,   setPages]   = useState(1);
+  const [total,   setTotal]   = useState(0);
   const [sort,    setSort]    = useState({ col: 'company_name', dir: 'asc' });
   const [modal,   setModal]   = useState(false);
   const [form,    setForm]    = useState(EMPTY);
@@ -26,19 +30,26 @@ export default function Parties() {
   const [saving,  setSaving]  = useState(false);
   const { show } = useToast();
 
-  async function load(sortOpts) {
-    const s = sortOpts || sort;
-    const d = await api.get(`/admin/parties?sort=${s.col}&order=${s.dir}`);
-    if (d.ok) setParties(d.parties);
+  // Real server-side pagination: fetch and render one page at a time.
+  async function load(p = page, sortOpts = sort) {
+    const s = sortOpts;
+    const d = await api.get(`/admin/parties?page=${p}&sort=${s.col}&order=${s.dir}`);
+    if (d.ok) {
+      if (d.parties.length === 0 && p > 1) return load(p - 1, s);
+      setParties(d.parties);
+      setPage(p);
+      setPages(d.pages || 1);
+      setTotal(d.total || 0);
+    }
   }
 
   function handleSort(col) {
     const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
     setSort(newSort);
-    load(newSort);
+    load(1, newSort);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(1, sort); }, []);
 
   function openAdd() { setForm(EMPTY); setEditId(null); setModal(true); }
   function openEdit(p) {
@@ -55,20 +66,20 @@ export default function Parties() {
       ? await api.put(`/admin/parties/${editId}`, payload)
       : await api.post('/admin/parties', payload);
     setSaving(false);
-    if (d.ok) { setModal(false); load(); show(editId ? 'Updated' : 'Party added'); }
+    if (d.ok) { setModal(false); load(editId ? page : 1, sort); show(editId ? 'Updated' : 'Party added'); }
     else show(d.error || 'Failed', 'error');
   }
 
   async function toggle(id) {
     const d = await api.patch(`/admin/parties/${id}/toggle`);
-    if (d.ok) load();
+    if (d.ok) load(page, sort);
     else show('Failed', 'error');
   }
 
   async function del(id) {
     if (!confirm('Delete this party?')) return;
     const d = await api.del(`/admin/parties/${id}`);
-    if (d.ok) { load(); show('Deleted'); }
+    if (d.ok) { load(page, sort); show('Deleted'); }
     else show(d.error || 'Failed', 'error');
   }
 
@@ -120,6 +131,8 @@ export default function Parties() {
           </tbody>
         </table>
       </div>
+
+      <Pagination page={page} pages={pages} total={total} onChange={p => load(p, sort)} />
 
       {modal && (
         <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setModal(false); }}>
