@@ -5,26 +5,40 @@ const path = require('path');
 // Storage abstraction for uploaded images (product photos, logo, banners).
 //
 // Why this exists: images saved to a folder inside the deployed app directory
-// get wiped whenever the app is redeployed (git pull / fresh checkout), which
-// is what caused image links to go invalid after every code push. This module
-// makes it possible to store images in S3-compatible object storage instead —
-// completely outside the app's filesystem, so a redeploy can never touch them.
+// get wiped whenever the app is redeployed, which is what caused image links
+// to go invalid after every code push. This module writes images to a fixed
+// persistent folder instead (or S3-compatible object storage), and — as of
+// this batch — stores the final permanent public URL directly in the DB
+// (e.g. "https://coralgold.in/images/1700-foo.jpg"), exactly as requested,
+// rather than an opaque key that needs server-side resolution.
 //
-// Mode selection: S3 mode activates automatically when S3_BUCKET,
-// S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are all set. Otherwise falls back
-// to local disk at UPLOAD_DIR (unchanged behavior — set UPLOAD_DIR to a path
-// outside the repo for it to survive redeploys too, the simpler of the two
-// options this batch asked for).
+// Mode selection, in priority order:
+//   1. S3-compatible object storage — set S3_BUCKET, S3_ACCESS_KEY_ID and
+//      S3_SECRET_ACCESS_KEY. Most robust: images live entirely outside the
+//      app/server.
+//   2. Local disk at a fixed persistent folder — set IMAGES_DIR (absolute
+//      path on the server, e.g. public_html/Images) and IMAGES_PUBLIC_URL
+//      (e.g. https://coralgold.in/images). New uploads are written there and
+//      the DB stores the resulting https://…/images/<filename> URL directly.
+//   3. Local disk fallback (UPLOAD_DIR, or assets/uploads inside the app) —
+//      unchanged from earlier batches, for anyone who hasn't set IMAGES_DIR
+//      yet. Stored as an opaque "local:<filename>" key instead of a full URL
+//      since there's no known public URL base to build one from.
 //
-// Backward compatibility: every key this module hands out is tagged with the
-// backend that stored it (e.g. "s3:1700-foo.jpg" vs a legacy bare filename
-// "1700-foo.jpg" from before this module existed). An untagged legacy key is
-// always resolved against local disk, regardless of which mode is active now
-// — so switching a live site from local to S3 never breaks previously
-// uploaded images; only new uploads move to the new backend.
+// Backward compatibility: getPublicUrl/getBuffer/delete accept ANY of the
+// following forms found in the DB, from any point in this app's history:
+//   - a full "http(s)://…" URL (this batch, or S3 from Batch 12 once S3 also
+//     started storing full URLs) — used directly, no resolution needed
+//   - a tagged opaque key "local:x.jpg" / "s3:x.jpg" (Batch 12)
+//   - a bare legacy filename "x.jpg" (Batch 10 and earlier)
+// A row written under an older scheme keeps working forever, regardless of
+// which mode is active now — switching modes only changes where NEW uploads
+// go.
 
 const DEFAULT_UPLOAD_DIR = path.join(__dirname, '../../assets/uploads');
-let LOCAL_DIR = process.env.UPLOAD_DIR
+let LOCAL_DIR = process.env.IMAGES_DIR
+    ? path.resolve(process.env.IMAGES_DIR)
+    : process.env.UPLOAD_DIR
     ? path.resolve(process.env.UPLOAD_DIR)
     : DEFAULT_UPLOAD_DIR;
 
@@ -32,11 +46,15 @@ try {
     if (!fs.existsSync(LOCAL_DIR)) fs.mkdirSync(LOCAL_DIR, { recursive: true });
     fs.accessSync(LOCAL_DIR, fs.constants.W_OK);
 } catch (e) {
-    console.error(`[Storage] UPLOAD_DIR "${LOCAL_DIR}" is not usable (${e.message}). Falling back to ${DEFAULT_UPLOAD_DIR}.`);
+    console.error(`[Storage] Images directory "${LOCAL_DIR}" is not usable (${e.message}). Falling back to ${DEFAULT_UPLOAD_DIR}.`);
     LOCAL_DIR = DEFAULT_UPLOAD_DIR;
     try { if (!fs.existsSync(LOCAL_DIR)) fs.mkdirSync(LOCAL_DIR, { recursive: true }); }
     catch (e2) { console.error('[Storage] Fallback upload dir also failed:', e2.message); }
 }
+
+// e.g. https://coralgold.in/images — when set, new local uploads store the
+// full permanent URL directly in the DB instead of an opaque "local:" key.
+const LOCAL_PUBLIC_URL_BASE = (process.env.IMAGES_PUBLIC_URL || '').replace(/\/$/, '') || null;
 
 const S3_BUCKET     = process.env.S3_BUCKET;
 const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY_ID;
@@ -60,32 +78,47 @@ if (S3_ENABLED) {
 
 const MODE = S3_ENABLED ? 's3' : 'local';
 
-// Local disk being inside the repo/app directory is exactly the condition
-// that wipes images on redeploy — surface it loudly at startup.
-if (MODE === 'local' && !process.env.UPLOAD_DIR) {
-    console.warn(
-        '[Storage] Using local disk at', LOCAL_DIR, '(inside the app directory).',
-        'This folder can be wiped by a redeploy. Set UPLOAD_DIR to a path outside the app,',
-        'or configure S3_BUCKET/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY for object storage instead.'
-    );
+if (MODE === 's3') {
+    console.log(`[Storage] Mode: s3 (bucket: ${S3_BUCKET}, public URL base: ${s3PublicUrlBase})`);
+} else if (LOCAL_PUBLIC_URL_BASE) {
+    console.log(`[Storage] Mode: local, persistent folder ${LOCAL_DIR} — public URL base ${LOCAL_PUBLIC_URL_BASE}`);
 } else {
-    console.log(`[Storage] Mode: ${MODE}` + (MODE === 's3' ? ` (bucket: ${S3_BUCKET})` : ` (${LOCAL_DIR})`));
+    // Local disk with no known public URL base is exactly the "inside the
+    // app directory, gets wiped on redeploy" risk condition — surface it.
+    console.warn(
+        '[Storage] Using local disk at', LOCAL_DIR, 'with no IMAGES_PUBLIC_URL set.',
+        process.env.IMAGES_DIR || process.env.UPLOAD_DIR
+            ? 'Set IMAGES_PUBLIC_URL (e.g. https://coralgold.in/images) so uploads store a permanent URL.'
+            : 'This folder is inside the app directory and can be wiped by a redeploy. Set IMAGES_DIR to a persistent path and IMAGES_PUBLIC_URL to its public URL, or configure S3_BUCKET/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY for object storage instead.'
+    );
 }
 
-function isTagged(key) {
-    return typeof key === 'string' && /^(local|s3):/.test(key);
+function isUrl(v) {
+    return typeof v === 'string' && /^https?:\/\//i.test(v);
 }
-function untag(key) {
-    return isTagged(key) ? key.slice(key.indexOf(':') + 1) : key;
+function isTagged(v) {
+    return typeof v === 'string' && /^(local|s3):/.test(v);
 }
-function backendOf(key) {
-    if (!isTagged(key)) return 'local'; // legacy bare filename — always local disk
-    return key.slice(0, key.indexOf(':'));
+function filenameOf(v) {
+    if (isUrl(v)) return decodeURIComponent(v.split('/').pop());
+    if (isTagged(v)) return v.slice(v.indexOf(':') + 1);
+    return v; // bare legacy filename
+}
+// Which backend a stored value belongs to — for a full URL, matched against
+// the currently-configured public URL bases; for a tagged/legacy value,
+// read straight from the tag (or assumed local, per Batch 12's rule).
+function backendOf(v) {
+    if (isUrl(v)) {
+        if (s3PublicUrlBase && v.startsWith(s3PublicUrlBase + '/')) return 's3';
+        return 'local'; // our own IMAGES_PUBLIC_URL, or an unrecognized external URL
+    }
+    if (isTagged(v)) return v.slice(0, v.indexOf(':'));
+    return 'local';
 }
 
 async function saveLocal(buffer, filename) {
     fs.writeFileSync(path.join(LOCAL_DIR, filename), buffer);
-    return `local:${filename}`;
+    return LOCAL_PUBLIC_URL_BASE ? `${LOCAL_PUBLIC_URL_BASE}/${filename}` : `local:${filename}`;
 }
 
 async function saveS3(buffer, filename, contentType) {
@@ -93,60 +126,77 @@ async function saveS3(buffer, filename, contentType) {
     await s3Client.send(new PutObjectCommand({
         Bucket: S3_BUCKET, Key: filename, Body: buffer, ContentType: contentType || 'image/jpeg',
     }));
-    return `s3:${filename}`;
+    return `${s3PublicUrlBase}/${filename}`;
 }
 
 // Saves already-processed image bytes to whichever backend is active.
-// Returns the opaque key to store in the DB (image_path).
+// Returns the value to store in the DB (image_path) — a full permanent URL
+// whenever a public URL base is configured, otherwise an opaque key.
 async function save(buffer, filename, contentType) {
     return MODE === 's3' ? saveS3(buffer, filename, contentType) : saveLocal(buffer, filename);
 }
 
-async function del(key) {
-    if (!key) return;
-    const backend = backendOf(key);
-    const bare = untag(key);
+async function del(value) {
+    if (!value) return;
+    const backend  = backendOf(value);
+    const filename = filenameOf(value);
     try {
         if (backend === 's3') {
             const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
-            await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: bare }));
+            await s3Client.send(new DeleteObjectCommand({ Bucket: S3_BUCKET, Key: filename }));
         } else {
-            const p = path.join(LOCAL_DIR, path.basename(bare));
-            await fs.promises.unlink(p).catch(() => {});
+            await fs.promises.unlink(path.join(LOCAL_DIR, path.basename(filename))).catch(() => {});
         }
     } catch (e) {
-        console.error('[Storage] delete failed for', key, e.message);
+        console.error('[Storage] delete failed for', value, e.message);
     }
 }
 
 // Fetches raw bytes — used by PDF generation, which needs to embed the image.
-async function getBuffer(key) {
-    if (!key) return null;
-    const backend = backendOf(key);
-    const bare = untag(key);
+async function getBuffer(value) {
+    if (!value) return null;
+    const backend  = backendOf(value);
+    const filename = filenameOf(value);
     try {
         if (backend === 's3') {
             const { GetObjectCommand } = require('@aws-sdk/client-s3');
-            const res = await s3Client.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: bare }));
+            const res = await s3Client.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: filename }));
             const chunks = [];
             for await (const chunk of res.Body) chunks.push(chunk);
             return Buffer.concat(chunks);
         }
-        const p = path.join(LOCAL_DIR, path.basename(bare));
-        return fs.existsSync(p) ? fs.readFileSync(p) : null;
+        const p = path.join(LOCAL_DIR, path.basename(filename));
+        if (fs.existsSync(p)) return fs.readFileSync(p);
+        // Not on our local disk and not recognized as our own S3 bucket —
+        // if it's some other absolute URL, fetch it directly as a last resort.
+        if (isUrl(value)) return await fetchUrlAsBuffer(value);
+        return null;
     } catch (e) {
-        console.error('[Storage] getBuffer failed for', key, e.message);
+        console.error('[Storage] getBuffer failed for', value, e.message);
         return null;
     }
 }
 
+function fetchUrlAsBuffer(url) {
+    return new Promise((resolve) => {
+        const lib = url.startsWith('https:') ? require('https') : require('http');
+        lib.get(url, res => {
+            if (res.statusCode !== 200) { res.resume(); return resolve(null); }
+            const chunks = [];
+            res.on('data', c => chunks.push(c));
+            res.on('end', () => resolve(Buffer.concat(chunks)));
+        }).on('error', () => resolve(null));
+    });
+}
+
 // Public URL for use in API responses / <img> tags.
-function getPublicUrl(key) {
-    if (!key) return null;
-    const backend = backendOf(key);
-    const bare = untag(key);
-    if (backend === 's3') return `${s3PublicUrlBase}/${bare}`;
-    return '/uploads/' + path.basename(bare);
+function getPublicUrl(value) {
+    if (!value) return null;
+    if (isUrl(value)) return value; // already a permanent URL — use as-is
+    const backend  = backendOf(value);
+    const filename = filenameOf(value);
+    if (backend === 's3') return `${s3PublicUrlBase}/${filename}`;
+    return '/uploads/' + path.basename(filename); // legacy tagged/bare key, served by the app itself
 }
 
 // Lists every stored image — used by the Media Library.
@@ -159,11 +209,8 @@ async function list() {
             const res = await s3Client.send(new ListObjectsV2Command({ Bucket: S3_BUCKET, ContinuationToken }));
             for (const obj of res.Contents || []) {
                 if (!/\.(jpe?g|png|gif|webp|svg)$/i.test(obj.Key)) continue;
-                out.push({
-                    key: `s3:${obj.Key}`, filename: obj.Key,
-                    url: getPublicUrl(`s3:${obj.Key}`),
-                    size: obj.Size, mtime: obj.LastModified ? obj.LastModified.getTime() : 0,
-                });
+                const url = `${s3PublicUrlBase}/${obj.Key}`;
+                out.push({ key: url, filename: obj.Key, url, size: obj.Size, mtime: obj.LastModified ? obj.LastModified.getTime() : 0 });
             }
             ContinuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
         } while (ContinuationToken);
@@ -174,12 +221,14 @@ async function list() {
         .filter(f => IMAGE_RE.test(f) && f !== '.gitkeep')
         .map(f => {
             const stat = fs.statSync(path.join(LOCAL_DIR, f));
-            return { key: `local:${f}`, filename: f, url: getPublicUrl(`local:${f}`), size: stat.size, mtime: stat.mtimeMs };
+            const url  = LOCAL_PUBLIC_URL_BASE ? `${LOCAL_PUBLIC_URL_BASE}/${f}` : `/uploads/${f}`;
+            return { key: url, filename: f, url, size: stat.size, mtime: stat.mtimeMs };
         });
 }
 
 module.exports = {
     mode: MODE,
     localDir: LOCAL_DIR,
+    publicUrlBase: MODE === 's3' ? s3PublicUrlBase : LOCAL_PUBLIC_URL_BASE,
     save, delete: del, getBuffer, getPublicUrl, list,
 };

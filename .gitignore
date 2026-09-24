@@ -11,9 +11,18 @@ client/node_modules/
 # Uploads (runtime)
 uploads/
 
-# Uploaded product images
+# Uploaded product images (legacy path — kept for any images already there)
 assets/uploads/*
 !assets/uploads/.gitkeep
+
+# Persistent image storage (Batch 13) — served at https://coralgold.in/images/.
+# This folder must NEVER be part of what gets committed/deployed: if the repo
+# root is Hostinger's deploy target (public_html), a git-based deploy leaves
+# untracked files alone, but confirm in Hostinger's own deploy settings
+# whether anything here does a destructive mirror/sync instead — .gitignore
+# alone does not protect against that. See README/.env.example for details.
+Images/*
+!Images/.gitkeep
 
 # Thumbnail cache
 assets/thumbs/*

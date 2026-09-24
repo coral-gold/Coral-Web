@@ -383,7 +383,7 @@ router.get('/media', async (req, res) => {
         const total  = files.length;
         const offset = (page - 1) * per;
         res.json({
-            ok: true, storageMode: storage.mode,
+            ok: true, storageMode: storage.mode, storagePersistent: !!storage.publicUrlBase,
             files: files.slice(offset, offset + per), total, pages: Math.max(1, Math.ceil(total / per)),
         });
     } catch (e) {

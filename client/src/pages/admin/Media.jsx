@@ -30,6 +30,7 @@ function LibraryTab() {
   const [pages,     setPages]    = useState(1);
   const [total,     setTotal]    = useState(0);
   const [storageMode, setStorageMode] = useState(null); // 'local' | 's3'
+  const [storagePersistent, setStoragePersistent] = useState(false);
   const [sort,      setSort]     = useState({ col: 'mtime', dir: 'desc' });
   const [uploading, setUploading]= useState(false);
   const [copied,    setCopied]   = useState(null);
@@ -46,6 +47,7 @@ function LibraryTab() {
       setPages(d.pages || 1);
       setTotal(d.total || 0);
       setStorageMode(d.storageMode || null);
+      setStoragePersistent(!!d.storagePersistent);
     }
   }
 
@@ -71,9 +73,15 @@ function LibraryTab() {
     else show(d.error || 'Failed', 'error');
   }
 
+  // url is already an absolute permanent link (S3, or a configured
+  // IMAGES_PUBLIC_URL) or a same-origin relative path (/uploads/…) —
+  // only the latter needs the origin prefixed.
+  function absoluteUrl(url) {
+    return /^https?:\/\//i.test(url) ? url : window.location.origin + url;
+  }
+
   function copyUrl(url) {
-    const full = window.location.origin + url;
-    navigator.clipboard.writeText(full).then(() => {
+    navigator.clipboard.writeText(absoluteUrl(url)).then(() => {
       setCopied(url);
       setTimeout(() => setCopied(null), 1800);
     });
@@ -92,10 +100,15 @@ function LibraryTab() {
           <div className="alert alert-success" style={{ marginBottom: 16, fontSize: 13 }}>
             <strong>Storage: Object storage (S3).</strong> Images live outside the app and survive every code deploy.
           </div>
+        ) : storagePersistent ? (
+          <div className="alert alert-success" style={{ marginBottom: 16, fontSize: 13 }}>
+            <strong>Storage: Persistent local folder.</strong> New uploads are saved outside the app's deploy path and survive redeploys.
+          </div>
         ) : (
           <div className="alert alert-warning" style={{ marginBottom: 16, fontSize: 13 }}>
-            <strong>Storage: Local disk.</strong> New uploads survive redeploys only if <code>UPLOAD_DIR</code> is set to a path
-            outside the app folder on the server. Configure S3 (<code>S3_BUCKET</code>, <code>S3_ACCESS_KEY_ID</code>, <code>S3_SECRET_ACCESS_KEY</code>) for the most robust option.
+            <strong>Storage: Local disk inside the app folder — at risk.</strong> New uploads can be lost on the next redeploy.
+            Set <code>IMAGES_DIR</code> + <code>IMAGES_PUBLIC_URL</code> to a persistent folder, or configure S3
+            (<code>S3_BUCKET</code>, <code>S3_ACCESS_KEY_ID</code>, <code>S3_SECRET_ACCESS_KEY</code>) for the most robust option.
           </div>
         )
       )}
@@ -136,7 +149,7 @@ function LibraryTab() {
                   {new Date(f.mtime).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </td>
                 <td style={{ fontSize: 11, color: 'var(--mid)', maxWidth: 180, wordBreak: 'break-all' }}>
-                  {window.location.origin + f.url}
+                  {absoluteUrl(f.url)}
                 </td>
                 <td style={{ whiteSpace: 'nowrap' }}>
                   <button className="btn btn-sm btn-outline" onClick={() => copyUrl(f.url)} style={{ marginRight: 6 }}>

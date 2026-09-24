@@ -62,7 +62,7 @@ export default function Content() {
             <div style={{ marginBottom: 12 }}>
               <img src={form.site_logo} alt="Logo" style={{ height: 48, objectFit: 'contain', background: '#333', padding: 4 }} />
               <div style={{ marginTop: 6, fontSize: 12, color: 'var(--mid)', wordBreak: 'break-all' }}>
-                URL: <code>{window.location.origin}{form.site_logo}</code>
+                URL: <code>{/^https?:\/\//i.test(form.site_logo) ? form.site_logo : window.location.origin + form.site_logo}</code>
               </div>
             </div>
           )}

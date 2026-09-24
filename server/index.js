@@ -22,10 +22,14 @@ app.use(session({
     cookie: { httpOnly: true, maxAge: 8 * 60 * 60 * 1000, sameSite: 'lax' }
 }));
 
-// Static assets — only serves local-disk uploads (/uploads/*). In S3 mode,
-// images are fetched directly from the bucket's public URL instead, so this
-// route simply goes unused for those images.
+// Static assets — serves local-disk images at both /images/* (the requested
+// permanent URL path, e.g. https://coralgold.in/images/<filename>) and the
+// older /uploads/* path (kept for any DB rows still using the pre-Batch-13
+// storage scheme). Both serve the exact same directory. In S3 mode, images
+// are fetched directly from the bucket's public URL instead, so neither
+// route is used for those images — this stays harmless either way.
 const storage = require('./lib/storage');
+app.use('/images',  express.static(storage.localDir));
 app.use('/uploads', express.static(storage.localDir));
 
 // API routes
