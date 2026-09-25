@@ -57,49 +57,12 @@ function ProductCard({ product, inCart, onToggle, onPreview }) {
   );
 }
 
-// List view — the same dense, functional-first table style as Admin's
-// Products list (item 1), for parties who'd rather scan rows than cards.
-function ProductListRow({ product, inCart, onToggle, onPreview }) {
-  const { settings } = useSiteContent();
-  return (
-    <tr className={inCart ? 'catalogue-list-row-in-cart' : ''}>
-      <td style={{ width: 56 }}>
-        <CatalogImage
-          src={product.image} alt={product.designNo} loading="lazy"
-          imgClassName="catalogue-list-img" placeholderClassName="catalogue-list-img-placeholder"
-          onClick={() => onPreview(product.id)}
-        />
-      </td>
-      <td>
-        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--secondary)' }}>{product.designNo}</div>
-        <div style={{ fontSize: 11, color: 'var(--mid)' }}>{product.jewelCode}</div>
-      </td>
-      {settings.showNetWeight   && <td style={{ whiteSpace: 'nowrap' }}>{product.netWeight}g</td>}
-      {settings.showGrossWeight && <td style={{ whiteSpace: 'nowrap' }}>{product.grossWeight}g</td>}
-      {settings.showAmount      && <td>{product.amount || '—'}</td>}
-      <td>
-        {product.tags && product.tags.length > 0 && (
-          <div className="product-tags" style={{ margin: 0 }}>
-            {product.tags.slice(0, 3).map(t => <span key={t} className="product-tag-chip">{t}</span>)}
-          </div>
-        )}
-      </td>
-      <td style={{ whiteSpace: 'nowrap' }}>
-        <AddButton product={product} inCart={inCart} onToggle={onToggle} className="catalogue-list-add-btn" />
-      </td>
-    </tr>
-  );
-}
-
 function readStoredView() {
   try {
-    const v = localStorage.getItem(VIEW_KEY);
-    if (v === 'list') return 'list';
-    const n = parseInt(v, 10);
-    if (GRID_VIEWS.includes(n)) return n;
+    const v = parseInt(localStorage.getItem(VIEW_KEY), 10);
+    if (GRID_VIEWS.includes(v)) return v;
   } catch {}
-  // First-time visitors (no stored preference) default to List view (item 1).
-  return 'list';
+  return 3;
 }
 
 export default function WholesalerCatalogue() {
@@ -229,12 +192,6 @@ export default function WholesalerCatalogue() {
           Catalogue
         </h1>
         <div className="grid-cols-picker" role="group" aria-label="Catalogue view">
-          <button
-            type="button" className={`grid-cols-btn${view === 'list' ? ' active' : ''}`}
-            onClick={() => changeView('list')} title="List view"
-          >
-            ☰ List
-          </button>
           {GRID_VIEWS.map(n => (
             <button
               key={n} type="button"
@@ -327,34 +284,11 @@ export default function WholesalerCatalogue() {
         <p style={{ color: 'var(--mid)' }}><span className="spinner-dark" />Loading…</p>
       )}
 
-      {view === 'list' ? (
-        <div className="table-wrap">
-          <table className="admin-table catalogue-list-table">
-            <thead>
-              <tr>
-                <th>Image</th>
-                <th>Design No. / Jewel Code</th>
-                {settings.showNetWeight   && <th>Net Wt.</th>}
-                {settings.showGrossWeight && <th>Gross Wt.</th>}
-                {settings.showAmount      && <th>Amount</th>}
-                <th>Tags</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map(p => (
-                <ProductListRow key={p.id} product={p} inCart={inCartIds.has(p.id)} onToggle={toggleCart} onPreview={openPreview} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className={`product-grid cols-${view}`}>
-          {products.map(p => (
-            <ProductCard key={p.id} product={p} inCart={inCartIds.has(p.id)} onToggle={toggleCart} onPreview={openPreview} />
-          ))}
-        </div>
-      )}
+      <div className={`product-grid cols-${view}`}>
+        {products.map(p => (
+          <ProductCard key={p.id} product={p} inCart={inCartIds.has(p.id)} onToggle={toggleCart} onPreview={openPreview} />
+        ))}
+      </div>
 
       {!loading && products.length === 0 && (
         <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0' }}>No products found.</p>

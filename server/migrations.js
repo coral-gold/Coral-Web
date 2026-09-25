@@ -57,6 +57,13 @@ async function runMigrations() {
             SELECT id, category_id FROM products
         `);
 
+        // Batch 23 item 6: "Merge Category" redefined as a non-destructive
+        // parent/sub-category mapping — a raw ERP category (e.g. WTDC) can
+        // point parent_id at a friendly Parent Category (e.g. "Watch")
+        // without deleting the raw row or moving any product.
+        await addColumnIfMissing('categories', 'parent_id', 'INT NULL');
+        await ensureIndex('categories', 'idx_parent', '(parent_id)');
+
         // Batch 21: extra gallery photos beyond products.image_path, feeding
         // the swipeable image preview (item 1).
         await db.query(`

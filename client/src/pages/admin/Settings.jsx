@@ -130,7 +130,8 @@ export default function Settings() {
             ))}
           </div>
           <p style={{ fontSize: 12, color: 'var(--mid)', marginTop: 10 }}>
-            Quotation PDFs always include product images, in this layout.
+            Wholesaler quotation PDFs always include product images, in this layout.
+            Admin's own PDF download can also generate a compact version without images.
           </p>
         </div>
 

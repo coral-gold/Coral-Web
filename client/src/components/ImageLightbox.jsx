@@ -16,11 +16,12 @@ const LightboxCtx = createContext(null);
 //          images. Used where there's no "whole catalog" to page through:
 //          admin thumbnails, the public preview, a cart line item.
 //  - { products: [{ images, inCart?, ...}], index?, onToggle? }
-//        → the catalog itself (Batch 22 item 2) — swipe/arrows move
-//          PRODUCT to product; each product's own extra images (if any)
-//          are reachable via the dots instead, so the two gestures never
-//          collide. onToggle(product) is called with whichever product is
-//          currently showing.
+//        → the catalog itself (Batch 22 item 2) — swipe/arrows step through
+//          the current product's own images first, then continue seamlessly
+//          into the next/previous product once those run out (Batch 23
+//          item 5); the dots still jump straight to one of the current
+//          product's images. onToggle(product) is called with whichever
+//          product is currently showing.
 function normalize(arg) {
   if (!arg) return null;
   if (typeof arg === 'string') {
@@ -66,19 +67,36 @@ export function ImageLightboxProvider({ children }) {
   function openImage(arg) { setState(normalize(arg)); }
   function close() { setState(null); }
 
-  // Multi-product: swipe/arrows page PRODUCT to product (Tinder-style,
-  // item 2). Single-product: same gesture pages through that product's own
-  // gallery, same as Batch 21 — never both at once, so there's no gesture
-  // ambiguity about what a swipe will do.
+  // Swipe/arrows step through the CURRENT product's own images first; once
+  // that runs out, the same gesture continues seamlessly into the next (or
+  // previous) product rather than dead-ending (Batch 23 item 5) — one
+  // continuous strip of images across the whole catalog, not two gestures
+  // (swipe within a product, tap a dot between products) fighting for the
+  // same finger motion. Single-product callers (Batch 21: admin thumbnails,
+  // public preview, cart line item) have nowhere else to go, so they keep
+  // wrapping within that one product's gallery exactly as before.
   function go(delta) {
     setState(s => {
       if (!s) return s;
-      if (s.products.length > 1) {
-        const n = s.products.length;
-        return { ...s, productIndex: (s.productIndex + delta + n) % n, imageIndex: 0 };
+      const currentImages = s.products[s.productIndex].images;
+      const nextImageIndex = s.imageIndex + delta;
+
+      if (nextImageIndex >= 0 && nextImageIndex < currentImages.length) {
+        return { ...s, imageIndex: nextImageIndex };
       }
-      const n = s.products[0].images.length;
-      return { ...s, imageIndex: (s.imageIndex + delta + n) % n };
+
+      if (s.products.length <= 1) {
+        const n = currentImages.length;
+        return { ...s, imageIndex: (nextImageIndex + n) % n };
+      }
+
+      const n = s.products.length;
+      const productIndex = (s.productIndex + delta + n) % n;
+      // Forward: land on the new product's first image. Backward: land on
+      // its last, so swiping back feels like walking the strip in reverse
+      // instead of always restarting at image 1.
+      const imageIndex = delta > 0 ? 0 : s.products[productIndex].images.length - 1;
+      return { ...s, productIndex, imageIndex };
     });
   }
 

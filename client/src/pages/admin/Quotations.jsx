@@ -85,8 +85,10 @@ export default function AdminQuotations() {
     debounce.current = setTimeout(() => load({ page: 1 }), 350);
   }, [search]);
 
-  function openPdf(id) {
-    window.open(`/api/admin/quotations/${id}/pdf`, '_blank');
+  // Admin-only choice (item 2) — the wholesaler-facing PDF never offers
+  // this; parties always get the with-images version.
+  function openPdf(id, withImages) {
+    window.open(`/api/admin/quotations/${id}/pdf?withImages=${withImages ? '1' : '0'}`, '_blank');
   }
 
   return (
@@ -139,7 +141,12 @@ export default function AdminQuotations() {
                 <td>{q.item_count}</td>
                 <td>{parseFloat(q.total_gross_weight || 0).toFixed(3)}g</td>
                 <td style={{ whiteSpace: 'nowrap' }}>
-                  <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id)}>Download PDF</button>
+                  <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, true)} style={{ marginRight: 6 }}>
+                    PDF with Image
+                  </button>
+                  <button className="btn btn-sm btn-outline" onClick={() => openPdf(q.id, false)}>
+                    PDF without Image
+                  </button>
                 </td>
               </tr>
             ))}

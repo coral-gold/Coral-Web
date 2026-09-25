@@ -1,9 +1,18 @@
 -- Coral Gold Database Schema v2.0
 
+-- parent_id is the whole "Merge Category" redefinition (Batch 23 item 6):
+-- a raw ERP category (e.g. WTDC) maps to a friendly Parent Category (e.g.
+-- "Watch") by pointing parent_id at it, without deleting the raw row or
+-- moving any product — every customer-facing read just resolves
+-- COALESCE(parent.name, c.name) instead. No FK constraint (kept loose like
+-- the rest of this table's relations); category deletion nulls out any
+-- parent_id pointing at it first, so a child never dangles.
 CREATE TABLE IF NOT EXISTS categories (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(100) NOT NULL UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    parent_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_parent (parent_id)
 );
 
 CREATE TABLE IF NOT EXISTS products (

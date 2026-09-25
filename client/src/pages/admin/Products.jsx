@@ -7,6 +7,18 @@ import { handleImgError } from '../../utils/image';
 import api from '../../api';
 
 const EMPTY = { design_number: '', jewel_code: '', category_ids: [], gross_weight: '', net_weight: '', amount: '', description: '', is_featured: false, tags: '' };
+const VIEW_KEY = 'cg_admin_products_view';
+const GRID_VIEWS = [1, 2, 3, 4];
+
+function readStoredView() {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    if (v === 'table') return 'table';
+    const n = parseInt(v, 10);
+    if (GRID_VIEWS.includes(n)) return n;
+  } catch {}
+  return 'table';
+}
 
 function Th({ col, sort, onSort, children }) {
   const active = sort.col === col;
@@ -32,6 +44,19 @@ export default function Products() {
   const [loadingMore,   setLoadingMore]   = useState(false);
   const [search,        setSearch]        = useState('');
   const [sort,          setSort]          = useState({ col: 'design_number', dir: 'asc' });
+  // Grid/table view + Category/Tag/weight-range filters — same as the
+  // wholesaler catalogue, for consistency (Batch 23 item 3). Filter option
+  // lists are the customer-facing resolved names (Parent Category, not raw
+  // ERP code), from the same unauthenticated endpoints the catalogue uses.
+  const [view,           setView]           = useState(readStoredView);
+  const [filterCats,     setFilterCats]     = useState([]);
+  const [filterTags,     setFilterTags]     = useState([]);
+  const [filterOptsLoading, setFilterOptsLoading] = useState(true);
+  const [activeCat,      setActiveCat]      = useState('');
+  const [activeTag,      setActiveTag]      = useState('');
+  const [netMin,         setNetMin]         = useState('');
+  const [netMax,         setNetMax]         = useState('');
+  const [filtersOpen,    setFiltersOpen]    = useState(false);
   const [modal,         setModal]         = useState(false);
   const [form,          setForm]          = useState(EMPTY);
   const [editId,        setEditId]        = useState(null);
@@ -64,9 +89,18 @@ export default function Products() {
   // Real server-side pagination: always fetches and renders exactly one page
   // (25 rows) at a time — never accumulates the whole catalog client-side.
 
+  function buildParams(p, s) {
+    const params = new URLSearchParams({ page: p, q: search, sort: s.col, order: s.dir });
+    if (activeCat) params.set('category', activeCat);
+    if (activeTag) params.set('tag', activeTag);
+    if (netMin !== '' && netMin != null) params.set('netMin', netMin);
+    if (netMax !== '' && netMax != null) params.set('netMax', netMax);
+    return params;
+  }
+
   async function load(p, s) {
     setLoading(true);
-    const d = await api.get(`/admin/products?page=${p}&q=${encodeURIComponent(search)}&sort=${s.col}&order=${s.dir}`);
+    const d = await api.get(`/admin/products?${buildParams(p, s)}`);
     setLoading(false);
     if (d.ok) {
       // A delete/bulk-delete can empty out the last page — step back one page automatically.
@@ -87,7 +121,7 @@ export default function Products() {
     if (page >= pages || loadingMore) return;
     setLoadingMore(true);
     const nextPage = page + 1;
-    const d = await api.get(`/admin/products?page=${nextPage}&q=${encodeURIComponent(search)}&sort=${sort.col}&order=${sort.dir}`);
+    const d = await api.get(`/admin/products?${buildParams(nextPage, sort)}`);
     setLoadingMore(false);
     if (d.ok) {
       setProducts(prev => [...prev, ...d.products]);
@@ -110,13 +144,26 @@ export default function Products() {
   useEffect(() => {
     api.get('/admin/categories?all=1').then(d => { if (d.ok) setCategories(d.categories); setLoadingCategories(false); });
     api.get('/admin/tags').then(d => { if (d.ok) setAllTags(d.tags.map(t => t.name)); });
-    load(1, sort);
+    // Same customer-facing filter option lists the wholesaler catalogue uses
+    // (resolved Parent Category names, not raw ERP codes) — item 3.
+    Promise.all([
+      api.get('/catalogue/categories').then(d => { if (d.ok) setFilterCats(d.categories); }),
+      api.get('/catalogue/tags').then(d => { if (d.ok) setFilterTags(d.tags); }),
+    ]).finally(() => setFilterOptsLoading(false));
   }, []);
 
   useEffect(() => {
     clearTimeout(debounce.current);
     debounce.current = setTimeout(() => { load(1, sort); }, 350);
-  }, [search]);
+  }, [search, netMin, netMax]);
+
+  // Also covers the very first load (activeCat/activeTag start at '').
+  useEffect(() => { load(1, sort); }, [activeCat, activeTag]);
+
+  function changeView(v) {
+    setView(v);
+    try { localStorage.setItem(VIEW_KEY, String(v)); } catch {}
+  }
 
   // ── Full edit modal ───────────────────────────────────────────────────────
 
@@ -277,6 +324,40 @@ export default function Products() {
     setSelectAllMatching(false);
   }
 
+  // Export PDF returns a binary file, not the { ok, ... } JSON every other
+  // bulk action uses, so it can't go through api.post — fetch it directly
+  // and trigger a download from the returned blob.
+  async function exportPdf(ids) {
+    setBulkSaving(true);
+    try {
+      const resp = await fetch('/api/admin/products/export-pdf', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.error || `Export failed (HTTP ${resp.status}).`);
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'products-export.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setBulkAction('');
+      show(`Exported ${ids.length} product(s) to PDF.`);
+    } catch (e) {
+      show(e.message || 'Export failed', 'error');
+    } finally {
+      setBulkSaving(false);
+    }
+  }
+
   async function applyBulk() {
     if (!bulkAction) return show('Select an action.', 'error');
     const ids = [...selected];
@@ -287,6 +368,7 @@ export default function Products() {
     if (bulkAction === 'change_category' && !bulkCatId) {
       return show('Select a target category.', 'error');
     }
+    if (bulkAction === 'export_pdf') return exportPdf(ids);
     setBulkSaving(true);
     const payload = { action: bulkAction, ids };
     if (bulkAction === 'change_category') payload.category_id = Number(bulkCatId);
@@ -314,15 +396,103 @@ export default function Products() {
 
   return (
     <AdminLayout>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
         <h1 className="admin-page-title" style={{ margin: 0 }}>Products</h1>
-        <button className="btn btn-primary btn-sm" onClick={openAdd}>+ Add Product</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="grid-cols-picker" role="group" aria-label="Products view">
+            <button
+              type="button" className={`grid-cols-btn${view === 'table' ? ' active' : ''}`}
+              onClick={() => changeView('table')} title="Table view"
+            >
+              ☰ Table
+            </button>
+            {GRID_VIEWS.map(n => (
+              <button
+                key={n} type="button"
+                className={`grid-cols-btn${view === n ? ' active' : ''}`}
+                onClick={() => changeView(n)}
+                title={n === 1 ? 'Single column' : `${n} × ${n} grid`}
+              >
+                {n}×{n}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={openAdd}>+ Add Product</button>
+        </div>
       </div>
 
       <div className="search-bar" style={{ marginBottom: 12 }}>
         <input type="search" className="form-control" placeholder="Search by design no., jewel code or category…"
                value={search} onChange={e => setSearch(e.target.value)} />
+        {/* Category/Tag/weight-range — collapsed by default, same pattern as
+            the wholesaler catalogue (item 3). */}
+        <button
+          type="button"
+          className={`btn btn-outline filter-toggle-btn${filtersOpen ? ' active' : ''}`}
+          onClick={() => setFiltersOpen(o => !o)}
+          aria-expanded={filtersOpen}
+        >
+          Filter
+          {(activeCat || activeTag || netMin !== '' || netMax !== '') && (
+            <span className="filter-count-badge">
+              {(activeCat ? 1 : 0) + (activeTag ? 1 : 0) + (netMin !== '' || netMax !== '' ? 1 : 0)}
+            </span>
+          )}
+        </button>
       </div>
+
+      {filtersOpen && (
+        <div className="catalogue-filters-panel">
+          <div className="weight-range-filter">
+            <span className="catalogue-filters-label">Net Wt. (g):</span>
+            <input
+              type="number" min="0" step="0.1" className="form-control form-control-sm"
+              placeholder="Min" value={netMin} onChange={e => setNetMin(e.target.value)}
+            />
+            <span className="weight-range-sep">–</span>
+            <input
+              type="number" min="0" step="0.1" className="form-control form-control-sm"
+              placeholder="Max" value={netMax} onChange={e => setNetMax(e.target.value)}
+            />
+            {(netMin !== '' || netMax !== '') && (
+              <button type="button" className="btn-link-clear" onClick={() => { setNetMin(''); setNetMax(''); }}>
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div className="catalogue-filters">
+            {filterOptsLoading ? (
+              <span style={{ fontSize: 13, color: 'var(--mid)' }}><span className="spinner-dark" />Loading categories…</span>
+            ) : (
+              <>
+                <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>All</button>
+                {filterCats.map(c => (
+                  <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
+                    {c}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+
+          {!filterOptsLoading && filterTags.length > 0 && (
+            <div className="catalogue-filters catalogue-tag-filters">
+              <span className="catalogue-filters-label">Tags:</span>
+              <button className={`filter-btn filter-btn-tag${activeTag === '' ? ' active' : ''}`} onClick={() => setActiveTag('')}>All</button>
+              {filterTags.map(t => (
+                <button key={t} className={`filter-btn filter-btn-tag${activeTag === t ? ' active' : ''}`} onClick={() => setActiveTag(t === activeTag ? '' : t)}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <button type="button" className="btn btn-primary btn-sm filter-panel-apply" onClick={() => setFiltersOpen(false)}>
+            Apply Filters
+          </button>
+        </div>
+      )}
 
       {/* Bulk toolbar */}
       {anySelected && (
@@ -337,6 +507,7 @@ export default function Products() {
               <option value="delete">Delete</option>
               <option value="change_category">Change Category</option>
               <option value="delete_image">Delete Image</option>
+              <option value="export_pdf">Export PDF</option>
             </select>
             {bulkAction === 'change_category' && (
               <select className="form-control form-control-sm" value={bulkCatId} onChange={e => setBulkCatId(e.target.value)}
@@ -366,6 +537,7 @@ export default function Products() {
         </div>
       )}
 
+      {view === 'table' ? (
       <div className="table-wrap">
         <table className="admin-table">
           <thead>
@@ -470,6 +642,41 @@ export default function Products() {
           </tbody>
         </table>
       </div>
+      ) : (
+        <div className={`product-grid cols-${view}`}>
+          {products.length === 0 && (
+            <p style={{ textAlign: 'center', color: 'var(--mid)', padding: '40px 0', gridColumn: '1 / -1' }}>No products yet.</p>
+          )}
+          {products.map(p => (
+            <div key={p.id} className="product-card">
+              {p.image_url
+                ? <img src={p.image_url} className="product-card-img" alt="" style={{ cursor: 'zoom-in' }} onClick={() => openImage(p.image_url)} onError={handleImgError} />
+                : <div className="product-card-placeholder">💍</div>}
+              <div className="product-card-body">
+                <div className="product-code">{p.design_number} &bull; {p.jewel_code}</div>
+                <div style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 4 }}>
+                  {p.categories && p.categories.length ? p.categories.map(c => c.name).join(', ') : p.category_name}
+                </div>
+                <div className="weight-secondary">
+                  {p.net_weight ? parseFloat(p.net_weight).toFixed(3) + 'g net' : '—'}
+                  {p.gross_weight ? ` · ${parseFloat(p.gross_weight).toFixed(3)}g gross` : ''}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                  <button className="btn btn-sm btn-outline" style={{ flex: 1 }} onClick={() => openEdit(p)}>Edit</button>
+                  <button
+                    type="button" onClick={() => toggleFeatured(p)}
+                    title={p.is_featured ? 'Remove from Signature Items' : 'Show in Signature Items on Home page'}
+                    style={{ background: 'none', border: '1.5px solid var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: '0 10px', color: p.is_featured ? 'var(--secondary)' : '#ccc' }}
+                  >
+                    {p.is_featured ? '★' : '☆'}
+                  </button>
+                  <button className="btn btn-sm btn-danger" onClick={() => del(p.id)}>Del</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Pagination page={page} pages={pages} total={total} loadingMore={loadingMore} onChange={p => goToPage(p)} onLoadMore={loadMore} />
 

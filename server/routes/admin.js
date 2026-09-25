@@ -8,7 +8,7 @@ const db      = require('../db');
 const { requireAdmin }  = require('../middleware/auth');
 const { imageUpload, xlsxUpload, saveImage } = require('../middleware/upload');
 const storage = require('../lib/storage');
-const { generateQuotationPDF }    = require('../pdf');
+const { generateQuotationPDF, generateProductExportPDF } = require('../pdf');
 const { getPdfSettings }          = require('../lib/settings');
 
 router.use(requireAdmin);
@@ -49,17 +49,30 @@ router.get('/dashboard', async (req, res) => {
 });
 
 // ── Categories ─────────────────────────────────────────────────────────────────
+// "Merge Category" was redefined in Batch 23 item 6: raw ERP category codes
+// (WTDC, LRDC, …) are never deleted or moved — they stay the real category
+// every product belongs to. Instead a raw category's parent_id can point at
+// a friendly Parent Category (e.g. "Watch"), purely a display-time mapping:
+// every customer-facing read resolves COALESCE(parent.name, c.name), so a
+// product in WTDC shows as "Watch" everywhere a customer looks, while Admin
+// still manages the real WTDC row underneath. New imports that reuse an
+// already-mapped raw category name pick up its mapping automatically, since
+// they resolve to the same existing categories row — no re-mapping needed.
 
 // ?all=1 returns the full unpaginated list — used by dropdowns/pickers
-// (Add/Edit Product category select, bulk change-category, merge modal)
-// which need every option visible, not just one page of them.
+// (Add/Edit Product category select, bulk change-category, category
+// mapping modal) which need every option visible, not just one page.
 const CATEGORY_SORT_COLS = { name: 'c.name', product_count: 'product_count' };
 
 router.get('/categories', async (req, res) => {
     try {
         if (req.query.all === '1') {
             const [rows] = await db.query(
-                'SELECT c.*, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON p.category_id = c.id GROUP BY c.id ORDER BY c.name'
+                `SELECT c.*, p2.name AS parent_name, COUNT(p.id) AS product_count
+                 FROM categories c
+                 LEFT JOIN categories p2 ON p2.id = c.parent_id
+                 LEFT JOIN products p ON p.category_id = c.id
+                 GROUP BY c.id ORDER BY c.name`
             );
             return res.json({ ok: true, categories: rows });
         }
@@ -70,13 +83,41 @@ router.get('/categories', async (req, res) => {
         const sortDir = req.query.order === 'desc' ? 'DESC' : 'ASC';
         const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM categories');
         const [rows] = await db.query(
-            `SELECT c.*, COUNT(p.id) AS product_count FROM categories c LEFT JOIN products p ON p.category_id = c.id
+            `SELECT c.*, p2.name AS parent_name, COUNT(p.id) AS product_count
+             FROM categories c
+             LEFT JOIN categories p2 ON p2.id = c.parent_id
+             LEFT JOIN products p ON p.category_id = c.id
              GROUP BY c.id ORDER BY ${sortCol} ${sortDir} LIMIT ? OFFSET ?`,
             [per, offset]
         );
         res.json({ ok: true, categories: rows, total, pages: Math.max(1, Math.ceil(total / per)) });
     } catch (e) {
         console.error('[categories list]', e);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// GET /admin/categories/tree — Parent Category → its mapped sub-categories,
+// for Admin's own reference (never exposed to end users). A category with
+// no children still appears, on its own, as a standalone leaf.
+router.get('/categories/tree', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT c.*, COUNT(DISTINCT p.id) AS product_count
+             FROM categories c LEFT JOIN products p ON p.category_id = c.id
+             GROUP BY c.id ORDER BY c.name`
+        );
+        const byId = Object.fromEntries(rows.map(r => [r.id, { ...r, children: [] }]));
+        const roots = [];
+        for (const r of rows) {
+            if (r.parent_id && byId[r.parent_id]) byId[r.parent_id].children.push(byId[r.id]);
+            else roots.push(byId[r.id]);
+        }
+        roots.sort((a, b) => a.name.localeCompare(b.name));
+        for (const r of roots) r.children.sort((a, b) => a.name.localeCompare(b.name));
+        res.json({ ok: true, tree: roots });
+    } catch (e) {
+        console.error('[categories tree]', e);
         res.status(500).json({ ok: false, error: e.message });
     }
 });
@@ -108,6 +149,10 @@ router.put('/categories/:id', async (req, res) => {
 
 router.delete('/categories/:id', async (req, res) => {
     try {
+        // No DB-level FK on parent_id (kept loose, like the rest of this
+        // table) — un-map any children first so deleting a parent never
+        // leaves a dangling reference, it just makes them standalone again.
+        await db.query('UPDATE categories SET parent_id = NULL WHERE parent_id = ?', [req.params.id]);
         await db.query('DELETE FROM categories WHERE id = ?', [req.params.id]);
         res.json({ ok: true });
     } catch (e) {
@@ -117,32 +162,43 @@ router.delete('/categories/:id', async (req, res) => {
     }
 });
 
-// POST /admin/categories/merge  { targetId, sourceIds: [id, ...] }
-router.post('/categories/merge', async (req, res) => {
-    const { targetId, sourceIds } = req.body;
-    if (!targetId || !Array.isArray(sourceIds) || sourceIds.length === 0) {
-        return res.json({ ok: false, error: 'targetId and at least one sourceId required.' });
-    }
-    const ids = sourceIds.map(Number).filter(n => n && n !== Number(targetId));
-    if (ids.length === 0) return res.json({ ok: false, error: 'No valid source categories.' });
+// POST /admin/categories/:id/map  { parentId } — points this raw category
+// at a Parent Category. Non-destructive: no product or product_categories
+// row changes, only this one row's parent_id. Kept to a strict two-level
+// hierarchy (a parent can't itself have a parent; a category that already
+// has children of its own can't become someone else's child) so "Parent →
+// raw sub-categories" always stays one level deep, matching the spec.
+router.post('/categories/:id/map', async (req, res) => {
+    const id = Number(req.params.id);
+    const parentId = Number(req.body.parentId);
+    if (!parentId) return res.json({ ok: false, error: 'parentId required.' });
+    if (id === parentId) return res.json({ ok: false, error: 'A category cannot be mapped to itself.' });
     try {
-        const placeholders = ids.map(() => '?').join(',');
-        await db.query(
-            `UPDATE products SET category_id = ? WHERE category_id IN (${placeholders})`,
-            [targetId, ...ids]
-        );
-        // Re-point every product_categories membership from a source category
-        // to the target before the source rows get cascade-deleted below —
-        // otherwise a product's non-primary membership in a merged category
-        // would just vanish instead of becoming a membership in the target.
-        await db.query(
-            `INSERT IGNORE INTO product_categories (product_id, category_id)
-             SELECT product_id, ? FROM product_categories WHERE category_id IN (${placeholders})`,
-            [targetId, ...ids]
-        );
-        await db.query(`DELETE FROM categories WHERE id IN (${placeholders})`, ids);
-        res.json({ ok: true, moved: ids.length });
-    } catch (e) { console.error(e); res.json({ ok: false, error: e.message }); }
+        const [[parent]] = await db.query('SELECT id, parent_id FROM categories WHERE id = ?', [parentId]);
+        if (!parent) return res.json({ ok: false, error: 'Parent category not found.' });
+        if (parent.parent_id) return res.json({ ok: false, error: 'That category is itself mapped to a parent — pick a top-level category as the parent.' });
+        const [[{ c: childCount }]] = await db.query('SELECT COUNT(*) AS c FROM categories WHERE parent_id = ?', [id]);
+        if (childCount > 0) return res.json({ ok: false, error: 'This category already has sub-categories mapped to it — it can\'t also become a sub-category.' });
+        const [r] = await db.query('UPDATE categories SET parent_id = ? WHERE id = ?', [parentId, id]);
+        if (r.affectedRows === 0) return res.json({ ok: false, error: 'Category not found.' });
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[categories map]', e);
+        res.json({ ok: false, error: e.message });
+    }
+});
+
+// POST /admin/categories/:id/unmap — reverts a raw category back to
+// standalone (shown under its own name again).
+router.post('/categories/:id/unmap', async (req, res) => {
+    try {
+        const [r] = await db.query('UPDATE categories SET parent_id = NULL WHERE id = ?', [req.params.id]);
+        if (r.affectedRows === 0) return res.json({ ok: false, error: 'Category not found.' });
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[categories unmap]', e);
+        res.json({ ok: false, error: e.message });
+    }
 });
 
 // GET /admin/tags — every distinct tag in use, for the Add/Edit Product
@@ -236,6 +292,13 @@ router.get('/products', async (req, res) => {
     const search  = (req.query.q || '').trim();
     const sortCol = PRODUCT_SORT_COLS[req.query.sort] || 'p.created_at';
     const sortDir = req.query.order === 'asc' ? 'ASC' : 'DESC';
+    // Category/Tag/weight-range — same filters as the wholesaler catalogue,
+    // for consistency (Batch 23 item 3). Category matches by the resolved
+    // Parent Category name, same as customers see, not the raw ERP code.
+    const categories = [].concat(req.query.category || []).map(s => s.trim()).filter(Boolean);
+    const tags        = [].concat(req.query.tag      || []).map(s => s.trim()).filter(Boolean);
+    const netMin = req.query.netMin !== undefined && req.query.netMin !== '' ? parseFloat(req.query.netMin) : null;
+    const netMax = req.query.netMax !== undefined && req.query.netMax !== '' ? parseFloat(req.query.netMax) : null;
 
     const conds = ['p.active = 1'], params = [];
     if (search) {
@@ -243,6 +306,21 @@ router.get('/products', async (req, res) => {
         const l = `%${search}%`;
         params.push(l, l, l, l);
     }
+    if (categories.length) {
+        conds.push(`p.id IN (
+            SELECT pc.product_id FROM product_categories pc
+            JOIN categories c2 ON c2.id = pc.category_id
+            LEFT JOIN categories parentc2 ON parentc2.id = c2.parent_id
+            WHERE COALESCE(parentc2.name, c2.name) IN (${categories.map(() => '?').join(',')})
+        )`);
+        params.push(...categories);
+    }
+    if (tags.length) {
+        conds.push(`p.id IN (SELECT pt.product_id FROM product_tags pt JOIN tags t ON t.id = pt.tag_id WHERE t.name IN (${tags.map(() => '?').join(',')}))`);
+        params.push(...tags.map(t => t.toLowerCase()));
+    }
+    if (netMin !== null && !isNaN(netMin)) { conds.push('p.net_weight >= ?'); params.push(netMin); }
+    if (netMax !== null && !isNaN(netMax)) { conds.push('p.net_weight <= ?'); params.push(netMax); }
     const where = 'WHERE ' + conds.join(' AND ');
     try {
         const [[{ total }]] = await db.query(
@@ -516,6 +594,47 @@ router.post('/products/bulk', async (req, res) => {
         return res.json({ ok: false, error: 'Unknown action.' });
     } catch (e) {
         console.error(e);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
+
+// Bulk action: Export PDF (Batch 23 item 4) — a single PDF with an image +
+// details card for each selected product. Returns the PDF binary directly
+// (not JSON like the other bulk actions above) so the client downloads it
+// via fetch+blob rather than window.open.
+router.post('/products/export-pdf', async (req, res) => {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ ok: false, error: 'No products selected.' });
+    const safeIds = ids.map(Number).filter(n => Number.isInteger(n) && n > 0);
+    if (!safeIds.length) return res.status(400).json({ ok: false, error: 'Invalid IDs.' });
+
+    try {
+        const ph = safeIds.map(() => '?').join(',');
+        const [rows] = await db.query(
+            `SELECT p.*, COALESCE(parentc.name, c.name) AS category_name
+             FROM products p
+             JOIN categories c ON c.id = p.category_id
+             LEFT JOIN categories parentc ON parentc.id = c.parent_id
+             WHERE p.id IN (${ph})`,
+            safeIds
+        );
+        if (!rows.length) return res.status(404).json({ ok: false, error: 'No matching products.' });
+        rows.sort((a, b) => (a.design_number || '').localeCompare(b.design_number || ''));
+
+        const itemImages = {};
+        for (const p of rows) if (p.image_path) itemImages[p.id] = p.image_path;
+
+        const pdfSettings = await getPdfSettings();
+        const buf = await generateProductExportPDF(rows, { itemImages, layout: pdfSettings.layout });
+
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': 'attachment; filename="products-export.pdf"',
+            'Content-Length': buf.length,
+        });
+        res.end(buf);
+    } catch (e) {
+        console.error('[products export-pdf]', e);
         res.status(500).json({ ok: false, error: e.message });
     }
 });
@@ -994,10 +1113,14 @@ router.get('/quotations/:id', async (req, res) => {
     res.json({ ok: true, quotation: q, items });
 });
 
-// Always includes product images (Batch 20 item 1) — the earlier
-// text-only/with-images request choice is gone.
+// Admin-only choice: ?withImages=0 renders the compact no-photo data-table
+// PDF, otherwise (default) the same image-grid PDF the wholesaler always
+// gets. The wholesaler's own /api/quotation/:id/pdf route never takes this
+// param — parties still only ever get the with-images version (Batch 20
+// item 1 unchanged; Batch 23 item 2 adds the choice for Admin only).
 router.get('/quotations/:id/pdf', async (req, res) => {
     try {
+        const withImages = req.query.withImages !== '0';
         const [[q]] = await db.query(
             'SELECT q.*, p.company_name, p.party_id, p.phone FROM quotations q JOIN parties p ON p.id=q.party_id WHERE q.id=?',
             [req.params.id]
@@ -1006,16 +1129,19 @@ router.get('/quotations/:id/pdf', async (req, res) => {
         const [items] = await db.query('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id', [q.id]);
 
         let itemImages = {};
-        const productIds = items.map(i => i.product_id).filter(Boolean);
-        if (productIds.length) {
-            const ph = productIds.map(() => '?').join(',');
-            const [imgRows] = await db.query(`SELECT id, image_path FROM products WHERE id IN (${ph})`, productIds);
-            for (const r of imgRows) if (r.image_path) itemImages[r.id] = r.image_path;
+        if (withImages) {
+            const productIds = items.map(i => i.product_id).filter(Boolean);
+            if (productIds.length) {
+                const ph = productIds.map(() => '?').join(',');
+                const [imgRows] = await db.query(`SELECT id, image_path FROM products WHERE id IN (${ph})`, productIds);
+                for (const r of imgRows) if (r.image_path) itemImages[r.id] = r.image_path;
+            }
         }
 
         const pdfSettings = await getPdfSettings();
-        const buf = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items, { withImages: true, itemImages, ...pdfSettings });
-        res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${q.quotation_number}.pdf"`, 'Content-Length': buf.length });
+        const buf = await generateQuotationPDF(q, { company_name: q.company_name, party_id: q.party_id, phone: q.phone }, items, { withImages, itemImages, ...pdfSettings });
+        const suffix = withImages ? '' : '-no-images';
+        res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${q.quotation_number}${suffix}.pdf"`, 'Content-Length': buf.length });
         res.end(buf);
     } catch (e) { console.error(e); res.status(500).send('Error'); }
 });

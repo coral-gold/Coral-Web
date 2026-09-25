@@ -32,26 +32,35 @@ async function galleryUrlsByProduct(ids) {
 
 router.get('/preview', requireSiteUnlocked, async (req, res) => {
     try {
-        const [cats] = await db.query(
-            `SELECT DISTINCT c.id, c.name FROM categories c
+        // Group by the resolved display name, not the raw category id — two
+        // raw categories mapped to the same Parent Category (e.g. WTDC and
+        // LRDC both → "Watch") must show as one section, never two, and
+        // never under their raw code (Batch 23 item 6).
+        const [catRows] = await db.query(
+            `SELECT c.id, COALESCE(parentc.name, c.name) AS display_name
+             FROM categories c
+             LEFT JOIN categories parentc ON parentc.id = c.parent_id
              JOIN product_categories pc ON pc.category_id = c.id
-             JOIN products p ON p.id = pc.product_id AND p.active = 1
-             ORDER BY c.name LIMIT ?`,
-            [PREVIEW_CATEGORIES]
+             JOIN products p ON p.id = pc.product_id AND p.active = 1`
         );
+        const idsByName = {};
+        for (const r of catRows) (idsByName[r.display_name] ??= new Set()).add(r.id);
+        const names = Object.keys(idsByName).sort().slice(0, PREVIEW_CATEGORIES);
 
         const categories = [];
-        for (const cat of cats) {
+        for (const name of names) {
+            const ids = [...idsByName[name]];
+            const ph = ids.map(() => '?').join(',');
             const [rows] = await db.query(
                 `SELECT DISTINCT p.id, p.design_number, p.image_path, p.created_at FROM products p
                  JOIN product_categories pc ON pc.product_id = p.id
-                 WHERE pc.category_id = ? AND p.active = 1
+                 WHERE pc.category_id IN (${ph}) AND p.active = 1
                  ORDER BY p.created_at DESC LIMIT ?`,
-                [cat.id, PREVIEW_PER_CATEGORY]
+                [...ids, PREVIEW_PER_CATEGORY]
             );
             const extraByProduct = await galleryUrlsByProduct(rows.map(r => r.id));
             categories.push({
-                name: cat.name,
+                name,
                 products: rows.map(p => ({
                     id: p.id,
                     designNo: p.design_number,
@@ -118,7 +127,15 @@ router.get('/', requireParty, async (req, res) => {
     const params = [];
 
     if (categories.length) {
-        conds.push(`p.id IN (SELECT pc.product_id FROM product_categories pc JOIN categories c ON c.id = pc.category_id WHERE c.name IN (${categories.map(() => '?').join(',')}))`);
+        // Filtering by a Parent Category name (what the customer actually
+        // sees) must match every raw category mapped to it, not just a raw
+        // category literally named that (item 6).
+        conds.push(`p.id IN (
+            SELECT pc.product_id FROM product_categories pc
+            JOIN categories c2 ON c2.id = pc.category_id
+            LEFT JOIN categories parentc2 ON parentc2.id = c2.parent_id
+            WHERE COALESCE(parentc2.name, c2.name) IN (${categories.map(() => '?').join(',')})
+        )`);
         params.push(...categories);
     }
     if (tags.length) {
@@ -142,27 +159,38 @@ router.get('/', requireParty, async (req, res) => {
         );
         const [rows] = await db.query(
             `SELECT p.id, p.design_number, p.jewel_code, p.gross_weight, p.net_weight,
-                    p.quantity, p.amount, p.image_path, p.description, c.name AS category
-             FROM products p JOIN categories c ON c.id = p.category_id
+                    p.quantity, p.amount, p.image_path, p.description,
+                    COALESCE(parentc.name, c.name) AS category
+             FROM products p
+             JOIN categories c ON c.id = p.category_id
+             LEFT JOIN categories parentc ON parentc.id = c.parent_id
              ${where} ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
             [...params, per, offset]
         );
 
         // Batched category/tag lookup per row (for filter chips on the card),
-        // same pattern as the admin product list.
+        // same pattern as the admin product list. Categories are resolved to
+        // their Parent Category name and de-duplicated — a product in both
+        // WTDC and LRDC (both → "Watch") shows "Watch" once, not twice.
         const ids = rows.map(r => r.id);
         let catsByProduct = {}, tagsByProduct = {};
         if (ids.length) {
             const ph = ids.map(() => '?').join(',');
             const [catRows] = await db.query(
-                `SELECT pc.product_id, c.name FROM product_categories pc JOIN categories c ON c.id = pc.category_id WHERE pc.product_id IN (${ph})`,
+                `SELECT pc.product_id, COALESCE(parentc.name, c.name) AS name
+                 FROM product_categories pc
+                 JOIN categories c ON c.id = pc.category_id
+                 LEFT JOIN categories parentc ON parentc.id = c.parent_id
+                 WHERE pc.product_id IN (${ph})`,
                 ids
             );
             const [tagRows] = await db.query(
                 `SELECT pt.product_id, t.name FROM product_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.product_id IN (${ph})`,
                 ids
             );
-            for (const r of catRows) (catsByProduct[r.product_id] ??= []).push(r.name);
+            const catSetByProduct = {};
+            for (const r of catRows) (catSetByProduct[r.product_id] ??= new Set()).add(r.name);
+            for (const [pid, set] of Object.entries(catSetByProduct)) catsByProduct[pid] = [...set];
             for (const r of tagRows) (tagsByProduct[r.product_id] ??= []).push(r.name);
         }
 
@@ -194,10 +222,14 @@ router.get('/', requireParty, async (req, res) => {
 // buttons. Category names aren't sensitive, so this stays unauthenticated.
 router.get('/categories', async (req, res) => {
     try {
+        // Resolved to Parent Category name (item 6) — a customer never sees
+        // a raw ERP code like "WTDC", only "Watch".
         const [rows] = await db.query(
-            `SELECT DISTINCT c.name FROM categories c
+            `SELECT DISTINCT COALESCE(parentc.name, c.name) AS name
+             FROM categories c
+             LEFT JOIN categories parentc ON parentc.id = c.parent_id
              JOIN product_categories pc ON pc.category_id = c.id
-             JOIN products p ON p.id = pc.product_id WHERE p.active = 1 ORDER BY c.name`
+             JOIN products p ON p.id = pc.product_id WHERE p.active = 1 ORDER BY name`
         );
         res.json({ ok: true, categories: rows.map(r => r.name) });
     } catch (e) {
