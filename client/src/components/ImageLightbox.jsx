@@ -61,8 +61,9 @@ function normalize(arg) {
 // taps, one place to look, swipe-swipe-tap-add and keep going.
 export function ImageLightboxProvider({ children }) {
   const [state, setState] = useState(null);
-  const touchStartX = useRef(null);
-  const touchDeltaX  = useRef(0);
+  const dragStartX = useRef(null);
+  const dragDeltaX  = useRef(0);
+  const dragActive  = useRef(false);
 
   function openImage(arg) { setState(normalize(arg)); }
   function close() { setState(null); }
@@ -111,11 +112,28 @@ export function ImageLightboxProvider({ children }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [state]);
 
-  function onTouchStart(e) { touchStartX.current = e.touches[0].clientX; touchDeltaX.current = 0; }
-  function onTouchMove(e)  { if (touchStartX.current != null) touchDeltaX.current = e.touches[0].clientX - touchStartX.current; }
-  function onTouchEnd() {
-    if (Math.abs(touchDeltaX.current) > 40) go(touchDeltaX.current < 0 ? 1 : -1);
-    touchStartX.current = null; touchDeltaX.current = 0;
+  // Pointer Events (not raw touch events) so the same handlers cover a
+  // touchscreen swipe AND a mouse/trackpad drag — a bug fix (Batch 25 item
+  // 1): the previous touch-only listeners meant swipe-through-the-catalog
+  // only ever worked on an actual touchscreen, so anyone checking it with a
+  // mouse (most desktop testing) saw nothing happen and arrow buttons were
+  // the only thing that worked. Pointer Events unify touch, mouse and pen
+  // through one API, supported by every evergreen browser this app targets.
+  function onPointerDown(e) {
+    dragStartX.current = e.clientX;
+    dragDeltaX.current = 0;
+    dragActive.current = true;
+  }
+  function onPointerMove(e) {
+    if (!dragActive.current) return;
+    dragDeltaX.current = e.clientX - dragStartX.current;
+  }
+  function onPointerUp() {
+    if (!dragActive.current) return;
+    if (Math.abs(dragDeltaX.current) > 40) go(dragDeltaX.current < 0 ? 1 : -1);
+    dragActive.current = false;
+    dragStartX.current = null;
+    dragDeltaX.current = 0;
   }
 
   async function handleToggle() {
@@ -158,7 +176,8 @@ export function ImageLightboxProvider({ children }) {
         <div
           className="lightbox-gallery"
           onClick={e => e.stopPropagation()}
-          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+          onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp} onPointerLeave={onPointerUp} onPointerCancel={onPointerUp}
         >
           {canNavigate && (
             <button
