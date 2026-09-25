@@ -1,32 +1,91 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
-import Pagination from '../../components/Pagination';
 import { useToast } from '../../components/Toast';
 import api from '../../api';
 
-function Th({ col, sort, onSort, children }) {
-  const active = sort.col === col;
+const NEW_PARENT = '__new__';
+
+// A single node in the Category Structure tree — a top-level category (with
+// or without mapped children) or one of its mapped children. Exactly one
+// Edit and one Delete action per node (plus Un-map for a mapped child) —
+// previously the same category could appear once in a read-only tree card
+// AND again as its own row in a separate flat table below, each with its
+// own Edit/Delete, which looked like duplicated entries (Batch 24 item 1).
+function CategoryNode({ node, depth, expanded, onToggle, editId, editName, setEditName,
+                         onStartEdit, onSaveEdit, onCancelEdit, onDelete, onUnmap }) {
+  const hasChildren = node.children && node.children.length > 0;
+  const isEditing = editId === node.id;
+
   return (
-    <th style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }} onClick={() => onSort(col)}>
-      {children}
-      <span style={{ marginLeft: 4, color: active ? 'var(--garnet)' : '#bbb', fontSize: 10 }}>
-        {active ? (sort.dir === 'asc' ? '▲' : '▼') : '⇅'}
-      </span>
-    </th>
+    <>
+      <div
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 6px', paddingLeft: 6 + depth * 26,
+          borderBottom: '1px solid var(--border)', flexWrap: 'wrap',
+        }}
+      >
+        {hasChildren ? (
+          <button
+            type="button" onClick={() => onToggle(node.id)}
+            aria-label={expanded ? 'Collapse' : 'Expand'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mid)', fontSize: 11, width: 16, padding: 0 }}
+          >
+            {expanded ? '▾' : '▸'}
+          </button>
+        ) : (
+          <span style={{ width: 16, display: 'inline-block' }} />
+        )}
+
+        {isEditing ? (
+          <input
+            className="form-control form-control-sm" style={{ maxWidth: 220 }}
+            value={editName} onChange={e => setEditName(e.target.value)} autoFocus
+          />
+        ) : (
+          <strong style={{ color: depth === 0 ? 'var(--primary)' : 'var(--near-black, #0f0f0f)' }}>{node.name}</strong>
+        )}
+
+        <span style={{ fontSize: 12, color: 'var(--mid)' }}>
+          ({node.product_count} product{node.product_count === 1 ? '' : 's'})
+        </span>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          {isEditing ? (
+            <>
+              <button className="btn btn-sm btn-primary" onClick={() => onSaveEdit(node.id)}>Save</button>
+              <button className="btn btn-sm btn-outline" onClick={onCancelEdit}>Cancel</button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-sm btn-outline" onClick={() => onStartEdit(node)}>Edit</button>
+              {node.parent_id && (
+                <button className="btn btn-sm btn-outline" onClick={() => onUnmap(node)}>Un-map</button>
+              )}
+              <button className="btn btn-sm btn-danger" onClick={() => onDelete(node)}>Delete</button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {hasChildren && expanded && node.children.map(child => (
+        <CategoryNode
+          key={child.id} node={child} depth={depth + 1}
+          expanded={expanded} onToggle={onToggle}
+          editId={editId} editName={editName} setEditName={setEditName}
+          onStartEdit={onStartEdit} onSaveEdit={onSaveEdit} onCancelEdit={onCancelEdit}
+          onDelete={onDelete} onUnmap={onUnmap}
+        />
+      ))}
+    </>
   );
 }
 
-const NEW_PARENT = '__new__';
-
 export default function Categories() {
-  const [categories,    setCategories]    = useState([]); // current page only
-  const [allCategories, setAllCategories] = useState([]); // full list, for mapping picker
   const [tree,          setTree]          = useState([]);
   const [treeLoading,   setTreeLoading]   = useState(true);
-  const [page,          setPage]          = useState(1);
-  const [pages,         setPages]         = useState(1);
-  const [total,         setTotal]         = useState(0);
-  const [sort,          setSort]          = useState({ col: 'name', dir: 'asc' });
+  const [expandedIds,   setExpandedIds]   = useState(new Set());
+  const [allCategories, setAllCategories] = useState([]); // full flat list, for the mapping picker only
   const [name,          setName]          = useState('');
   const [editId,        setEditId]        = useState(null);
   const [editName,      setEditName]      = useState('');
@@ -36,82 +95,70 @@ export default function Categories() {
   const [mapSrcs,       setMapSrcs]       = useState(new Set());
   const [mapLoading,    setMapLoading]    = useState(false);
   const [mapSaving,     setMapSaving]     = useState(false);
-  const [loadingMore,   setLoadingMore]   = useState(false);
   const { show } = useToast();
-
-  function handleSort(col) {
-    const newSort = { col, dir: sort.col === col && sort.dir === 'asc' ? 'desc' : 'asc' };
-    setSort(newSort);
-    load(1, newSort);
-  }
-
-  // Real server-side pagination: fetch and render one page at a time.
-  async function load(p = page, s = sort) {
-    const d = await api.get(`/admin/categories?page=${p}&sort=${s.col}&order=${s.dir}`);
-    if (d.ok) {
-      if (d.categories.length === 0 && p > 1) return load(p - 1, s);
-      setCategories(d.categories);
-      setPage(p);
-      setPages(d.pages || 1);
-      setTotal(d.total || 0);
-    }
-  }
-
-  // Load More / infinite scroll (Batch 21 item 4) — appends the next page.
-  async function loadMore() {
-    if (page >= pages || loadingMore) return;
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    const d = await api.get(`/admin/categories?page=${nextPage}&sort=${sort.col}&order=${sort.dir}`);
-    setLoadingMore(false);
-    if (d.ok) {
-      setCategories(prev => [...prev, ...d.categories]);
-      setPage(nextPage);
-      setPages(d.pages || 1);
-      setTotal(d.total || 0);
-    }
-  }
 
   async function loadTree() {
     setTreeLoading(true);
     const d = await api.get('/admin/categories/tree');
     setTreeLoading(false);
-    if (d.ok) setTree(d.tree);
+    if (d.ok) {
+      setTree(d.tree);
+      // Newly-mapped parents should show their children right away.
+      setExpandedIds(prev => {
+        const next = new Set(prev);
+        for (const node of d.tree) if (node.children.length > 0) next.add(node.id);
+        return next;
+      });
+    }
   }
 
-  useEffect(() => { load(1, sort); loadTree(); }, []);
+  useEffect(() => { loadTree(); }, []);
+
+  function toggleExpanded(id) {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   async function add(e) {
     e.preventDefault();
     const d = await api.post('/admin/categories', { name });
-    if (d.ok) { setName(''); load(1, sort); loadTree(); show('Category added'); }
+    if (d.ok) { setName(''); loadTree(); show('Category added'); }
     else show(d.error || 'Failed', 'error');
   }
 
-  async function save(id) {
+  function startEdit(node) { setEditId(node.id); setEditName(node.name); }
+  function cancelEdit()   { setEditId(null); }
+
+  async function saveEdit(id) {
     const d = await api.put(`/admin/categories/${id}`, { name: editName });
-    if (d.ok) { setEditId(null); load(page, sort); loadTree(); show('Saved'); }
+    if (d.ok) { setEditId(null); loadTree(); show('Saved'); }
     else show(d.error || 'Failed', 'error');
   }
 
-  async function del(id) {
-    if (!confirm('Delete this category? Any sub-categories mapped to it will become standalone again.')) return;
-    const d = await api.del(`/admin/categories/${id}`);
-    if (d.ok) { load(page, sort); loadTree(); show('Deleted'); }
+  async function del(node) {
+    const warn = node.children && node.children.length > 0
+      ? ` Its ${node.children.length} mapped sub-categor${node.children.length === 1 ? 'y' : 'ies'} will become standalone again.`
+      : '';
+    if (!confirm(`Delete "${node.name}"?${warn}`)) return;
+    const d = await api.del(`/admin/categories/${node.id}`);
+    if (d.ok) { loadTree(); show('Deleted'); }
     else show(d.error || 'Failed', 'error');
   }
 
-  async function unmap(id, catName) {
-    if (!confirm(`Un-map "${catName}" from its Parent Category? It'll show under its own name again.`)) return;
-    const d = await api.post(`/admin/categories/${id}/unmap`);
-    if (d.ok) { load(page, sort); loadTree(); show('Un-mapped'); }
+  async function unmap(node) {
+    if (!confirm(`Un-map "${node.name}" from its Parent Category? It'll show under its own name again.`)) return;
+    const d = await api.post(`/admin/categories/${node.id}/unmap`);
+    if (d.ok) { loadTree(); show('Un-mapped'); }
     else show(d.error || 'Failed', 'error');
   }
 
-  // Category Mapping needs to see every category, not just the current page —
-  // this is the non-destructive replacement for the old "Merge Categories"
-  // (Batch 5 item 5 used to delete the source categories; this only points
-  // their parent_id at the chosen Parent Category, item 6).
+  // Category Mapping needs to see every category, not just what's currently
+  // expanded — this is the non-destructive replacement for the old "Merge
+  // Categories" (Batch 5 item 5 used to delete the source categories; this
+  // only points their parent_id at the chosen Parent Category, item 6).
   async function openMap() {
     setMapParent('');
     setNewParentName('');
@@ -162,7 +209,6 @@ export default function Categories() {
     setMapSaving(false);
     if (failed < sourceIds.length) {
       setMapOpen(false);
-      load(1, sort);
       loadTree();
       show(`Mapped ${sourceIds.length - failed} categor${sourceIds.length - failed === 1 ? 'y' : 'ies'}.`);
     }
@@ -183,92 +229,33 @@ export default function Categories() {
         <button type="submit" className="btn btn-primary btn-sm">Add</button>
       </form>
 
-      {/* Parent Category → its mapped sub-categories — Admin's own reference
-          view (item 6); customers never see raw category codes anywhere. */}
-      <div className="admin-card" style={{ marginBottom: 24 }}>
+      {/* Single tree — each Parent Category expands to reveal its mapped
+          sub-categories, one Edit/Delete (and Un-map, for a child) per node.
+          What customers actually see is the Parent Category name — raw
+          codes mapped underneath stay internal to this view (item 6). */}
+      <div className="admin-card">
         <h3 style={{ marginBottom: 4 }}>Category Structure</h3>
         <p style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 12 }}>
           What customers actually see is the Parent Category name — raw codes mapped underneath stay internal.
         </p>
         {treeLoading ? (
           <p style={{ fontSize: 13, color: 'var(--mid)' }}><span className="spinner-dark" />Loading…</p>
+        ) : tree.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--mid)', padding: '12px 0' }}>No categories yet.</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
             {tree.map(node => (
-              <div key={node.id}>
-                <strong style={{ color: 'var(--primary)' }}>{node.name}</strong>
-                <span style={{ fontSize: 12, color: 'var(--mid)' }}> ({node.product_count} products{node.children.length > 0 ? ' directly' : ''})</span>
-                {node.children.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6, marginLeft: 16 }}>
-                    {node.children.map(child => (
-                      <span key={child.id} className="badge badge-muted" title={`${child.product_count} products`}>
-                        {child.name}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <CategoryNode
+                key={node.id} node={node} depth={0}
+                expanded={expandedIds.has(node.id)} onToggle={toggleExpanded}
+                editId={editId} editName={editName} setEditName={setEditName}
+                onStartEdit={startEdit} onSaveEdit={saveEdit} onCancelEdit={cancelEdit}
+                onDelete={del} onUnmap={unmap}
+              />
             ))}
           </div>
         )}
       </div>
-
-      <div className="table-wrap">
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <Th col="name"          sort={sort} onSort={handleSort}>Name</Th>
-              <th>Parent Category</th>
-              <Th col="product_count" sort={sort} onSort={handleSort}>Products</Th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories.length === 0 && (
-              <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--mid)', padding: 24 }}>No categories yet.</td></tr>
-            )}
-            {categories.map(c => (
-              <tr key={c.id}>
-                <td>
-                  {editId === c.id
-                    ? <input className="form-control form-control-sm" value={editName} onChange={e => setEditName(e.target.value)} />
-                    : c.name
-                  }
-                </td>
-                <td>
-                  {c.parent_name
-                    ? <span className="badge badge-muted">{c.parent_name}</span>
-                    : <span style={{ color: 'var(--mid)' }}>—</span>}
-                </td>
-                <td>{c.product_count}</td>
-                <td style={{ whiteSpace: 'nowrap' }}>
-                  {editId === c.id ? (
-                    <>
-                      <button className="btn btn-sm btn-primary" onClick={() => save(c.id)}>Save</button>
-                      {' '}
-                      <button className="btn btn-sm btn-outline" onClick={() => setEditId(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="btn btn-sm btn-outline" onClick={() => { setEditId(c.id); setEditName(c.name); }}>Edit</button>
-                      {' '}
-                      {c.parent_name && (
-                        <>
-                          <button className="btn btn-sm btn-outline" onClick={() => unmap(c.id, c.name)}>Un-map</button>
-                          {' '}
-                        </>
-                      )}
-                      <button className="btn btn-sm btn-danger" onClick={() => del(c.id)}>Delete</button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <Pagination page={page} pages={pages} total={total} loadingMore={loadingMore} onChange={p => load(p, sort)} onLoadMore={loadMore} />
 
       {/* ── Category Mapping Modal ── */}
       {mapOpen && (

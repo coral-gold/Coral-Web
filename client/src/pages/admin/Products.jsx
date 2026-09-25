@@ -468,8 +468,8 @@ export default function Products() {
               <>
                 <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>All</button>
                 {filterCats.map(c => (
-                  <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
-                    {c}
+                  <button key={c.name} className={`filter-btn${activeCat === c.name ? ' active' : ''}`} onClick={() => setActiveCat(c.name)}>
+                    {c.name}
                   </button>
                 ))}
               </>

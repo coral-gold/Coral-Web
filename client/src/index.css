@@ -235,6 +235,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 }
 .catalogue-filters .filter-btn:hover { border-color: var(--secondary); color: var(--secondary); }
 .catalogue-filters .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+/* Item count next to each category name (Batch 24 item 2) — muted so the
+   name itself stays the focal point, on both light and active/filled state. */
+.filter-btn .filter-count { opacity: .7; font-weight: 400; margin-left: 2px; }
+.catalogue-filters .filter-btn.active .filter-count { opacity: .85; }
 .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
 .search-bar input { flex: 1; }
 

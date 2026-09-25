@@ -254,8 +254,8 @@ export default function WholesalerCatalogue() {
               <>
                 <button className={`filter-btn${activeCat === '' ? ' active' : ''}`} onClick={() => setActiveCat('')}>All</button>
                 {categories.map(c => (
-                  <button key={c} className={`filter-btn${activeCat === c ? ' active' : ''}`} onClick={() => setActiveCat(c)}>
-                    {c}
+                  <button key={c.name} className={`filter-btn${activeCat === c.name ? ' active' : ''}`} onClick={() => setActiveCat(c.name)}>
+                    {c.name} <span className="filter-count">({c.count})</span>
                   </button>
                 ))}
               </>

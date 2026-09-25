@@ -219,19 +219,25 @@ router.get('/', requireParty, async (req, res) => {
 });
 
 // GET /api/catalogue/categories — used by the wholesaler catalogue's filter
-// buttons. Category names aren't sensitive, so this stays unauthenticated.
+// buttons (and reused by Admin's own Products filters). Category names
+// aren't sensitive, so this stays unauthenticated. Each entry carries a
+// product count (COUNT(DISTINCT p.id), not a row count — two raw categories
+// mapped to the same Parent, e.g. WTDC and LRDC both → "Watch", must not
+// double-count a product that happens to sit in both) so the wholesaler
+// catalogue can show "Watch (24)" next to the name (Batch 24 item 2).
 router.get('/categories', async (req, res) => {
     try {
         // Resolved to Parent Category name (item 6) — a customer never sees
         // a raw ERP code like "WTDC", only "Watch".
         const [rows] = await db.query(
-            `SELECT DISTINCT COALESCE(parentc.name, c.name) AS name
+            `SELECT COALESCE(parentc.name, c.name) AS name, COUNT(DISTINCT p.id) AS count
              FROM categories c
              LEFT JOIN categories parentc ON parentc.id = c.parent_id
              JOIN product_categories pc ON pc.category_id = c.id
-             JOIN products p ON p.id = pc.product_id WHERE p.active = 1 ORDER BY name`
+             JOIN products p ON p.id = pc.product_id WHERE p.active = 1
+             GROUP BY COALESCE(parentc.name, c.name) ORDER BY name`
         );
-        res.json({ ok: true, categories: rows.map(r => r.name) });
+        res.json({ ok: true, categories: rows.map(r => ({ name: r.name, count: r.count })) });
     } catch (e) {
         res.status(500).json({ ok: false });
     }
