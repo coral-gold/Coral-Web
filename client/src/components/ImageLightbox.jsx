@@ -15,13 +15,20 @@ const LightboxCtx = createContext(null);
 //        → one product (Batch 21 shape) — swipe/arrows move through ITS
 //          images. Used where there's no "whole catalog" to page through:
 //          admin thumbnails, the public preview, a cart line item.
-//  - { products: [{ images, inCart?, ...}], index?, onToggle? }
+//  - { products: [{ images, inCart?, ...}], index?, onToggle?, onLoadMore? }
 //        → the catalog itself (Batch 22 item 2) — swipe/arrows step through
 //          the current product's own images first, then continue seamlessly
 //          into the next/previous product once those run out (Batch 23
 //          item 5); the dots still jump straight to one of the current
 //          product's images. onToggle(product) is called with whichever
-//          product is currently showing.
+//          product is currently showing. onLoadMore, when given, is called
+//          when a forward swipe/arrow reaches the last currently-loaded
+//          product — it should fetch the catalog's next page and resolve to
+//          the newly available products (same shape as `products`), or a
+//          falsy/empty result once there's genuinely nothing left to load.
+//          Without this, swiping past whatever was in memory when the
+//          preview opened would loop back to item 1 even though the
+//          catalog had more pages server-side (Batch 26 item 1).
 function normalize(arg) {
   if (!arg) return null;
   if (typeof arg === 'string') {
@@ -38,7 +45,10 @@ function normalize(arg) {
         .filter(p => p.images.length);
       if (!products.length) return null;
       const productIndex = Math.min(Math.max(arg.index || 0, 0), products.length - 1);
-      return { products, productIndex, imageIndex: 0, onToggle: arg.onToggle };
+      return {
+        products, productIndex, imageIndex: 0, onToggle: arg.onToggle,
+        onLoadMore: arg.onLoadMore, loadingMore: false, exhausted: false,
+      };
     }
     const images = (arg.images || []).filter(Boolean);
     if (!images.length) return null;
@@ -76,28 +86,72 @@ export function ImageLightboxProvider({ children }) {
   // same finger motion. Single-product callers (Batch 21: admin thumbnails,
   // public preview, cart line item) have nowhere else to go, so they keep
   // wrapping within that one product's gallery exactly as before.
+  //
+  // Reads `state` directly (not the setState(s => ...) functional form) —
+  // safe because go/onPointerUp/the keydown listener are all recreated
+  // every render and always reference the latest `state`, and this needs a
+  // plain read to decide, synchronously, whether to kick off an async page
+  // fetch (which can't happen inside a setState updater).
   function go(delta) {
+    if (!state) return;
+    const currentImages = state.products[state.productIndex].images;
+    const nextImageIndex = state.imageIndex + delta;
+
+    if (nextImageIndex >= 0 && nextImageIndex < currentImages.length) {
+      setState(s => s && { ...s, imageIndex: nextImageIndex });
+      return;
+    }
+
+    if (state.products.length <= 1) {
+      const n = currentImages.length;
+      setState(s => s && { ...s, imageIndex: (nextImageIndex + n) % n });
+      return;
+    }
+
+    const rawNextProductIndex = state.productIndex + delta;
+
+    // Forward, past the last product currently in memory: pull in the
+    // catalog's next page before looping back to the start (Batch 26 item
+    // 1) — previously this wrapped immediately regardless of whether the
+    // catalog actually had more pages left.
+    if (delta > 0 && rawNextProductIndex >= state.products.length && state.onLoadMore && !state.exhausted) {
+      if (!state.loadingMore) loadMoreAndAdvance();
+      return;
+    }
+
+    const n = state.products.length;
+    const productIndex = (rawNextProductIndex + n) % n;
+    // Forward: land on the new product's first image. Backward: land on
+    // its last, so swiping back feels like walking the strip in reverse
+    // instead of always restarting at image 1.
+    const imageIndex = delta > 0 ? 0 : state.products[productIndex].images.length - 1;
+    setState(s => s && { ...s, productIndex, imageIndex });
+  }
+
+  async function loadMoreAndAdvance() {
+    if (!state || !state.onLoadMore || state.loadingMore || state.exhausted) return;
+    setState(s => s && { ...s, loadingMore: true });
+    let added = [];
+    try {
+      added = (await state.onLoadMore()) || [];
+    } catch {
+      added = [];
+    }
     setState(s => {
       if (!s) return s;
-      const currentImages = s.products[s.productIndex].images;
-      const nextImageIndex = s.imageIndex + delta;
-
-      if (nextImageIndex >= 0 && nextImageIndex < currentImages.length) {
-        return { ...s, imageIndex: nextImageIndex };
+      if (!added.length) {
+        // Genuinely nothing left on the server — complete this swipe by
+        // looping back to the start instead of leaving it stuck.
+        return { ...s, loadingMore: false, exhausted: true, productIndex: 0, imageIndex: 0 };
       }
-
-      if (s.products.length <= 1) {
-        const n = currentImages.length;
-        return { ...s, imageIndex: (nextImageIndex + n) % n };
-      }
-
-      const n = s.products.length;
-      const productIndex = (s.productIndex + delta + n) % n;
-      // Forward: land on the new product's first image. Backward: land on
-      // its last, so swiping back feels like walking the strip in reverse
-      // instead of always restarting at image 1.
-      const imageIndex = delta > 0 ? 0 : s.products[productIndex].images.length - 1;
-      return { ...s, productIndex, imageIndex };
+      const oldLen = s.products.length;
+      return {
+        ...s,
+        products: [...s.products, ...added],
+        loadingMore: false,
+        productIndex: oldLen, // first newly-loaded product
+        imageIndex: 0,
+      };
     });
   }
 
@@ -168,8 +222,9 @@ export function ImageLightboxProvider({ children }) {
 
         {multiProduct && (
           <div className="lightbox-product-counter" onClick={e => e.stopPropagation()}>
-            {state.productIndex + 1} / {state.products.length}
+            {state.productIndex + 1} / {state.products.length}{state.onLoadMore && !state.exhausted ? '+' : ''}
             {current.label && <span className="lightbox-product-label">{current.label}</span>}
+            {state.loadingMore && <span className="spinner" aria-label="Loading more" />}
           </div>
         )}
 

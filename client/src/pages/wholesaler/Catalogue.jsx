@@ -162,13 +162,10 @@ export default function WholesalerCatalogue() {
     return d.ok ? !inCart : inCart;
   }
 
-  // Opens the preview on the clicked product, primed with every other
-  // currently-loaded product too — swiping right/left inside the preview
-  // pages through the whole catalog Tinder-style, not just this one
-  // product's own photos (item 2), and Add to Quotation works from there
-  // without ever closing the dialog.
-  function openPreview(productId) {
-    const withImages = products
+  // Shapes a raw /catalogue product list into what the lightbox expects,
+  // dropping anything with no image to show.
+  function forLightbox(list) {
+    return list
       .filter(p => (p.images && p.images.length) || p.image)
       .map(p => ({
         id: p.id,
@@ -176,12 +173,50 @@ export default function WholesalerCatalogue() {
         inCart: inCartIds.has(p.id),
         label: p.designNo,
       }));
+  }
+
+  // Opens the preview on the clicked product, primed with every other
+  // currently-loaded product too — swiping right/left inside the preview
+  // pages through the whole catalog Tinder-style, not just this one
+  // product's own photos (item 2), and Add to Quotation works from there
+  // without ever closing the dialog.
+  //
+  // onLoadMore fetches the catalog's next page under the same filters once
+  // the swipe reaches whatever was already loaded when the preview opened
+  // (Batch 26 item 1) — previously the preview only ever knew about the
+  // page(s) already in `products`, so swiping past the end looped back to
+  // item 1 even with more pages left on the server. Deliberately doesn't
+  // touch the grid's own `products`/`page` state — the background list
+  // keeps whatever pagination the party sees (classic Prev/Next, Load More,
+  // or infinite scroll) unchanged by how far they swipe inside the preview.
+  function openPreview(productId) {
+    const withImages = forLightbox(products);
     const index = withImages.findIndex(p => p.id === productId);
     if (index === -1) return;
+
+    let loadedPage = page;
+    async function onLoadMore() {
+      if (loadedPage >= pages) return null;
+      const nextPage = loadedPage + 1;
+      const params = new URLSearchParams({ page: nextPage, search });
+      if (activeCat) params.set('category', activeCat);
+      if (activeTag) params.set('tag', activeTag);
+      if (netMin !== '' && netMin != null) params.set('netMin', netMin);
+      if (netMax !== '' && netMax != null) params.set('netMax', netMax);
+      const d = await api.get(`/catalogue?${params}`);
+      if (!d.ok || !d.products || !d.products.length) return null;
+      loadedPage = nextPage;
+      return forLightbox(d.products);
+    }
+
     openImage({
       products: withImages,
       index,
       onToggle: p => toggleCart(p, p.inCart),
+      // Omit entirely when every page is already loaded — nothing to fetch,
+      // and the lightbox then wraps around immediately on its own instead
+      // of hinting at more (a "+") that doesn't actually exist.
+      onLoadMore: page < pages ? onLoadMore : undefined,
     });
   }
 
