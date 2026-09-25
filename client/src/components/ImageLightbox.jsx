@@ -2,6 +2,16 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 
 const LightboxCtx = createContext(null);
 
+// Batch 27 item 1: start fetching the next page once this many items are
+// left in the loaded strip, instead of waiting for the swipe that actually
+// hits the boundary — that's what caused the visible stutter Batch 26 left
+// behind (load-on-demand fetches the network on the exact swipe that needs
+// the result). How many upcoming items' images to warm in the browser
+// cache follows the same idea — otherwise the data arrives smoothly but the
+// image itself still pops in late.
+const PREFETCH_REMAINING   = 3;
+const IMAGE_PRELOAD_AHEAD  = 3;
+
 // Every call site funnels into one internal shape: a list of "products"
 // (each its own image or small gallery) plus a current product/image
 // position. That's what makes the Tinder-style catalog swipe (item 2) and
@@ -74,9 +84,46 @@ export function ImageLightboxProvider({ children }) {
   const dragStartX = useRef(null);
   const dragDeltaX  = useRef(0);
   const dragActive  = useRef(false);
+  // The in-flight "fetch the next page" promise, if any — shared by the
+  // proactive prefetch effect and the on-demand fallback in go() so a fast
+  // swiper who outruns the prefetch reuses that same request instead of
+  // firing a second one.
+  const fetchPromiseRef = useRef(null);
+  const preloadedUrlsRef = useRef(new Set());
 
-  function openImage(arg) { setState(normalize(arg)); }
+  function openImage(arg) {
+    fetchPromiseRef.current = null;
+    preloadedUrlsRef.current = new Set();
+    setState(normalize(arg));
+  }
   function close() { setState(null); }
+
+  // Fetches the catalog's next page via onLoadMore and appends it — reused
+  // by both the proactive prefetch (fires a few items before the boundary)
+  // and the on-demand fallback in go() (only reached if a fast swiper
+  // outruns the prefetch). Dedupes concurrent callers onto one request.
+  function ensureNextPage() {
+    if (!state || !state.onLoadMore || state.exhausted) return Promise.resolve([]);
+    if (fetchPromiseRef.current) return fetchPromiseRef.current;
+    setState(s => s && { ...s, loadingMore: true });
+    const p = (async () => {
+      let added = [];
+      try {
+        added = (await state.onLoadMore()) || [];
+      } catch {
+        added = [];
+      }
+      setState(s => {
+        if (!s) return s;
+        if (!added.length) return { ...s, loadingMore: false, exhausted: true };
+        return { ...s, products: [...s.products, ...added], loadingMore: false };
+      });
+      fetchPromiseRef.current = null;
+      return added;
+    })();
+    fetchPromiseRef.current = p;
+    return p;
+  }
 
   // Swipe/arrows step through the CURRENT product's own images first; once
   // that runs out, the same gesture continues seamlessly into the next (or
@@ -110,12 +157,15 @@ export function ImageLightboxProvider({ children }) {
 
     const rawNextProductIndex = state.productIndex + delta;
 
-    // Forward, past the last product currently in memory: pull in the
-    // catalog's next page before looping back to the start (Batch 26 item
-    // 1) — previously this wrapped immediately regardless of whether the
-    // catalog actually had more pages left.
+    // Forward, past the last product currently in memory. In the normal
+    // case the prefetch effect below has already appended the next page by
+    // now, so this branch is never even reached — products.length already
+    // covers rawNextProductIndex and the plain wrap-around math further
+    // down just works. This is only the fallback for a swipe that outran
+    // the prefetch (Batch 26 item 1 / Batch 27 item 1): wait on the same
+    // in-flight fetch rather than looping back to item 1 immediately.
     if (delta > 0 && rawNextProductIndex >= state.products.length && state.onLoadMore && !state.exhausted) {
-      if (!state.loadingMore) loadMoreAndAdvance();
+      advanceOnceLoaded();
       return;
     }
 
@@ -128,30 +178,15 @@ export function ImageLightboxProvider({ children }) {
     setState(s => s && { ...s, productIndex, imageIndex });
   }
 
-  async function loadMoreAndAdvance() {
-    if (!state || !state.onLoadMore || state.loadingMore || state.exhausted) return;
-    setState(s => s && { ...s, loadingMore: true });
-    let added = [];
-    try {
-      added = (await state.onLoadMore()) || [];
-    } catch {
-      added = [];
-    }
+  async function advanceOnceLoaded() {
+    await ensureNextPage();
     setState(s => {
       if (!s) return s;
-      if (!added.length) {
-        // Genuinely nothing left on the server — complete this swipe by
-        // looping back to the start instead of leaving it stuck.
-        return { ...s, loadingMore: false, exhausted: true, productIndex: 0, imageIndex: 0 };
+      if (s.productIndex + 1 < s.products.length) {
+        return { ...s, productIndex: s.productIndex + 1, imageIndex: 0 };
       }
-      const oldLen = s.products.length;
-      return {
-        ...s,
-        products: [...s.products, ...added],
-        loadingMore: false,
-        productIndex: oldLen, // first newly-loaded product
-        imageIndex: 0,
-      };
+      // Still nothing more once the fetch resolved — genuinely exhausted.
+      return { ...s, productIndex: 0, imageIndex: 0 };
     });
   }
 
@@ -165,6 +200,36 @@ export function ImageLightboxProvider({ children }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [state]);
+
+  // Proactive prefetch (Batch 27 item 1): once only PREFETCH_REMAINING or
+  // fewer products are left ahead of the current position, start fetching
+  // the next page right away instead of waiting for the swipe that would
+  // hit the boundary — by the time the party actually gets there, the data
+  // is already in `state.products` and go() advances instantly.
+  useEffect(() => {
+    if (!state || !state.onLoadMore || state.exhausted || state.loadingMore) return;
+    const remaining = state.products.length - 1 - state.productIndex;
+    if (remaining <= PREFETCH_REMAINING) ensureNextPage();
+  }, [state?.productIndex, state?.products?.length, state?.exhausted, state?.loadingMore]);
+
+  // Warm the browser's image cache for the next few products ahead of the
+  // current position — otherwise even an already-fetched product's image
+  // only starts downloading the moment its <img> tag is actually rendered,
+  // so the data can arrive smoothly while the photo itself still pops in
+  // late (Batch 27 item 1). Re-runs whenever the position moves or a
+  // prefetched page grows the list, and never re-requests the same URL.
+  useEffect(() => {
+    if (!state) return;
+    const { products, productIndex } = state;
+    for (let i = productIndex + 1; i <= productIndex + IMAGE_PRELOAD_AHEAD && i < products.length; i++) {
+      const url = products[i].images[0];
+      if (url && !preloadedUrlsRef.current.has(url)) {
+        preloadedUrlsRef.current.add(url);
+        const img = new window.Image();
+        img.src = url;
+      }
+    }
+  }, [state?.productIndex, state?.products]);
 
   // Pointer Events (not raw touch events) so the same handlers cover a
   // touchscreen swipe AND a mouse/trackpad drag — a bug fix (Batch 25 item
