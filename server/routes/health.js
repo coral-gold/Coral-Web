@@ -2,57 +2,39 @@
 const router = require('express').Router();
 const db     = require('../db');
 
-// GET /api/health — diagnostic check (DB connection + schema + admin)
+// GET /api/health — diagnostic check (DB connection + schema + admin).
+// Unauthenticated by necessity (there's no admin account to log in as
+// before setup runs), and linked right on the public login pages as "View
+// Diagnostics" — but that only needs to be this detailed while the site
+// genuinely isn't configured yet. Once it is, it used to keep revealing
+// DB_HOST/DB_USER/DB_NAME and raw DB error text to any unauthenticated
+// visitor who clicked the link (found in the Batch 28 privacy/security
+// audit); now it drops straight to a bare up/down signal instead.
 router.get('/', async (req, res) => {
-    const report = {
-        env: {
-            DB_HOST: process.env.DB_HOST || '(not set)',
-            DB_USER: process.env.DB_USER || '(not set)',
-            DB_PASS: process.env.DB_PASS ? '(set)' : '(not set)',
-            DB_NAME: process.env.DB_NAME || '(not set)',
-            SESSION_SECRET: process.env.SESSION_SECRET ? '(set)' : '(not set — using default)',
-        },
-        db_configured: db.isConfigured(),
-        db_connect:    false,
-        schema_ok:     false,
-        admin_exists:  false,
-        error:         null,
-    };
-
-    if (!report.db_configured) {
-        report.error = 'No database config found. Set DB_HOST/DB_USER/DB_PASS/DB_NAME env vars, or visit /setup.';
-        return res.json(report);
-    }
-
-    try {
-        await db.query('SELECT 1');
-        report.db_connect = true;
-    } catch (e) {
-        const hint =
-            e.code === 'ER_DBACCESS_DENIED_ERROR' || e.code === 'ER_ACCESS_DENIED_ERROR'
-                ? ' → In Hostinger hPanel, add the DB user to the database and grant All Privileges. Also check DB_NAME is lowercase.'
-                : e.code === 'ECONNREFUSED' ? ' → Check DB_HOST value.' : '';
-        report.error = `DB connection failed (${e.code || 'ERR'}): ${e.message}${hint}`;
-        return res.json(report);
+    if (!db.isConfigured()) {
+        return res.json({
+            env: {
+                DB_HOST: process.env.DB_HOST || '(not set)',
+                DB_USER: process.env.DB_USER || '(not set)',
+                DB_PASS: process.env.DB_PASS ? '(set)' : '(not set)',
+                DB_NAME: process.env.DB_NAME || '(not set)',
+                SESSION_SECRET: process.env.SESSION_SECRET ? '(set)' : '(not set — using default)',
+            },
+            db_configured: false,
+            db_connect:    false,
+            schema_ok:     false,
+            admin_exists:  false,
+            error: 'No database config found. Set DB_HOST/DB_USER/DB_PASS/DB_NAME env vars, or visit /setup.',
+        });
     }
 
     try {
         await db.query('SELECT 1 FROM admins LIMIT 1');
-        report.schema_ok = true;
+        res.json({ ok: true });
     } catch (e) {
-        report.error = 'Tables not found. Visit /setup to initialise the schema.';
-        return res.json(report);
+        console.error('[health]', e.message);
+        res.json({ ok: false });
     }
-
-    try {
-        const [rows] = await db.query('SELECT COUNT(*) AS c FROM admins');
-        report.admin_exists = rows[0].c > 0;
-        if (!report.admin_exists) report.error = 'No admin user found. Visit /setup to create one.';
-    } catch (e) {
-        report.error = `Admin check failed: ${e.message}`;
-    }
-
-    res.json(report);
 });
 
 module.exports = router;

@@ -2,8 +2,20 @@
 const router  = require('express').Router();
 const bcrypt  = require('bcryptjs');
 const db      = require('../db');
+const throttle = require('../lib/loginThrottle');
 
+// The verbose Hostinger-specific hints below are only for the deployer
+// setting the site up for the first time (surfaced right on the public
+// login pages, since there's no admin session to gate them behind before
+// setup runs). Once the database is genuinely configured, a login error is
+// a live-site runtime problem, not a setup one — the previous, always-on
+// version of this kept leaking DB host/error/code detail (down to the raw
+// driver message on an unrecognized error) to any unauthenticated caller on
+// every DB hiccup, forever, which the Batch 28 privacy/security audit
+// flagged. Full detail always still goes to the server console via the
+// console.error already at each call site below.
 function dbErrorMessage(e) {
+    if (db.isConfigured()) return 'Server error. Please try again shortly.';
     const m = e.message || '';
     if (m.startsWith('Database not configured'))
         return 'Database not configured. Please visit /setup to complete setup.';
@@ -29,14 +41,16 @@ router.post('/party/login', async (req, res) => {
     const { partyId, password } = req.body;
     if (!partyId || !password) return res.json({ ok: false, error: 'Party ID and password required.' });
 
-    // Throttle: 5 attempts per 10 min per IP
-    const ipKey = 'login_' + (req.ip || 'x');
-    const now   = Date.now();
-    if (!req.session._loginAttempts) req.session._loginAttempts = {};
-    const att   = req.session._loginAttempts;
-    att[ipKey]  = (att[ipKey] || []).filter(t => now - t < 10 * 60 * 1000);
-    if (att[ipKey].length >= 5) {
-        return res.json({ ok: false, error: 'Too many attempts. Please wait 10 minutes.' });
+    // Real server-side throttle keyed by IP *and* by the account being
+    // attempted — either one tripping blocks the request, so a scripted
+    // attacker can't dodge the limit just by not sending a session cookie
+    // (the previous req.session-based counter reset for every request that
+    // did that), nor by rotating IPs against one target account.
+    const ipKey   = `party_ip_${req.ip || 'x'}`;
+    const acctKey = `party_acct_${String(partyId).toLowerCase()}`;
+    if (throttle.isBlocked(ipKey) || throttle.isBlocked(acctKey)) {
+        const mins = Math.max(throttle.minutesRemaining(ipKey), throttle.minutesRemaining(acctKey));
+        return res.json({ ok: false, error: `Too many failed attempts. Please wait ${mins} minute${mins === 1 ? '' : 's'} and try again.` });
     }
 
     try {
@@ -48,13 +62,15 @@ router.post('/party/login', async (req, res) => {
         const [rows] = await db.query('SELECT * FROM parties WHERE party_id = ?', [partyId]);
         const party  = rows[0];
         if (!party || !await bcrypt.compare(password, party.password_hash)) {
-            att[ipKey].push(now);
+            throttle.recordFailure(ipKey);
+            throttle.recordFailure(acctKey);
             return res.json({ ok: false, error: 'Invalid Party ID or password.' });
         }
         if (!party.is_active) {
             return res.json({ ok: false, error: 'This account has been disabled.' });
         }
-        att[ipKey] = [];
+        throttle.recordSuccess(ipKey);
+        throttle.recordSuccess(acctKey);
         req.session.partyId = party.id;
         req.session.party   = { id: party.id, partyId: party.party_id, companyName: party.company_name };
         res.json({ ok: true });
@@ -80,23 +96,25 @@ router.post('/admin/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.json({ ok: false, error: 'Username and password required.' });
 
-    const ipKey = 'admin_' + (req.ip || 'x');
-    const now   = Date.now();
-    if (!req.session._adminAttempts) req.session._adminAttempts = {};
-    const att   = req.session._adminAttempts;
-    att[ipKey]  = (att[ipKey] || []).filter(t => now - t < 10 * 60 * 1000);
-    if (att[ipKey].length >= 5) {
-        return res.json({ ok: false, error: 'Too many attempts.' });
+    // See the comment on /party/login above — same server-side, cookie-
+    // independent throttle, keyed by IP and by the account being attempted.
+    const ipKey   = `admin_ip_${req.ip || 'x'}`;
+    const acctKey = `admin_acct_${String(username).toLowerCase()}`;
+    if (throttle.isBlocked(ipKey) || throttle.isBlocked(acctKey)) {
+        const mins = Math.max(throttle.minutesRemaining(ipKey), throttle.minutesRemaining(acctKey));
+        return res.json({ ok: false, error: `Too many failed attempts. Please wait ${mins} minute${mins === 1 ? '' : 's'} and try again.` });
     }
 
     try {
         const [rows] = await db.query('SELECT * FROM admins WHERE username = ?', [username]);
         const admin  = rows[0];
         if (!admin || !await bcrypt.compare(password, admin.password_hash)) {
-            att[ipKey].push(now);
+            throttle.recordFailure(ipKey);
+            throttle.recordFailure(acctKey);
             return res.json({ ok: false, error: 'Invalid credentials.' });
         }
-        att[ipKey] = [];
+        throttle.recordSuccess(ipKey);
+        throttle.recordSuccess(acctKey);
         req.session.adminId = admin.id;
         req.session.admin   = { id: admin.id, username: admin.username };
         res.json({ ok: true });

@@ -26,8 +26,22 @@ router.get('/status', async (req, res) => {
     }
 });
 
+// Both /test-db and /run below are unauthenticated by necessity — there's no
+// admin account to log in as until the wizard actually runs. That's only
+// safe while setup genuinely hasn't happened yet: with no gate at all,
+// anyone could POST arbitrary DB credentials at any time and /run would
+// dutifully repoint the live app at an attacker's own database and hot-swap
+// the connection pool (db.reinit below) — a full takeover, found in the
+// Batch 28 privacy/security audit. Once a database is configured, both
+// routes refuse outright; reconfiguring a live deployment is an operator
+// task done via the server's own .env/config.json, not this HTTP endpoint.
+function refuseIfAlreadyConfigured(req, res, next) {
+    if (db.isConfigured()) return res.status(403).json({ ok: false, error: 'Setup has already been completed.' });
+    next();
+}
+
 // POST /api/setup/test-db — test DB connection without saving anything
-router.post('/test-db', async (req, res) => {
+router.post('/test-db', refuseIfAlreadyConfigured, async (req, res) => {
     const { host, user, password, database } = req.body;
     if (!host || !user || !database) {
         return res.json({ ok: false, error: 'Host, user and database are required.' });
@@ -45,7 +59,7 @@ router.post('/test-db', async (req, res) => {
 });
 
 // POST /api/setup/run — run full setup: schema + admin user + save config
-router.post('/run', async (req, res) => {
+router.post('/run', refuseIfAlreadyConfigured, async (req, res) => {
     const { host, user, password, database, adminUser, adminPass } = req.body;
     if (!host || !user || !database || !adminUser || !adminPass) {
         return res.json({ ok: false, error: 'All fields are required.' });

@@ -226,9 +226,20 @@ async function list() {
         });
 }
 
+// The hostname images are actually served from (e.g. "media.coralgold.in"),
+// derived from whichever public URL base is configured — used by index.js
+// to recognize requests arriving on that hostname (Batch 28 item 1: its
+// bare root was falling through to the SPA's own index.html, since Hostinger
+// binds every domain pointed at this app to the same Express process).
+function getMediaHostname() {
+    const base = MODE === 's3' ? s3PublicUrlBase : LOCAL_PUBLIC_URL_BASE;
+    if (!base) return null;
+    try { return new URL(base).hostname; } catch { return null; }
+}
+
 module.exports = {
     mode: MODE,
     localDir: LOCAL_DIR,
     publicUrlBase: MODE === 's3' ? s3PublicUrlBase : LOCAL_PUBLIC_URL_BASE,
-    save, delete: del, getBuffer, getPublicUrl, list,
+    save, delete: del, getBuffer, getPublicUrl, list, getMediaHostname,
 };
