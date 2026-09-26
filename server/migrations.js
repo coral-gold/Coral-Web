@@ -64,6 +64,14 @@ async function runMigrations() {
         await addColumnIfMissing('categories', 'parent_id', 'INT NULL');
         await ensureIndex('categories', 'idx_parent', '(parent_id)');
 
+        // Batch 30 item 1: Enable/Disable toggle per category — a pure
+        // visibility flag (same principle as products.active above), not a
+        // delete. Applies to a Parent Category and a mapped sub-category
+        // alike; catalogue queries hide a product when its own category OR
+        // that category's parent is disabled.
+        await addColumnIfMissing('categories', 'is_active', 'TINYINT NOT NULL DEFAULT 1');
+        await ensureIndex('categories', 'idx_active', '(is_active)');
+
         // Batch 21: extra gallery photos beyond products.image_path, feeding
         // the swipeable image preview (item 1).
         await db.query(`

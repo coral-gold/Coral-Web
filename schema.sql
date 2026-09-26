@@ -7,12 +7,22 @@
 -- COALESCE(parent.name, c.name) instead. No FK constraint (kept loose like
 -- the rest of this table's relations); category deletion nulls out any
 -- parent_id pointing at it first, so a child never dangles.
+-- is_active is a pure visibility toggle (Batch 30 item 1), same principle
+-- as products.active soft-delete (Batch 14 item 1) — disabling a category
+-- hides it and its products from the wholesaler/public catalog without
+-- deleting or un-mapping anything; re-enabling restores it immediately.
+-- Applies to a Parent Category and a mapped sub-category alike: a product
+-- is hidden if its own raw category is disabled, OR that category's Parent
+-- Category is disabled, so disabling "Watch" hides every raw code mapped
+-- under it without having to disable each one individually.
 CREATE TABLE IF NOT EXISTS categories (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(100) NOT NULL UNIQUE,
     parent_id INT NULL,
+    is_active TINYINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_parent (parent_id)
+    INDEX idx_parent (parent_id),
+    INDEX idx_active (is_active)
 );
 
 CREATE TABLE IF NOT EXISTS products (

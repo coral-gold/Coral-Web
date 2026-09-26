@@ -201,6 +201,20 @@ router.post('/categories/:id/unmap', async (req, res) => {
     }
 });
 
+// PATCH /admin/categories/:id/toggle — Enable/Disable, a pure visibility
+// flag (Batch 30 item 1): nothing is deleted or un-mapped, so re-enabling
+// restores the category (and its products) to the wholesaler/public
+// catalog immediately. Works the same for a Parent Category or a mapped
+// sub-category — catalogue.js hides a product when its own category OR
+// that category's parent (if mapped) is disabled, so disabling the parent
+// hides every raw code mapped under it without touching each one.
+router.patch('/categories/:id/toggle', async (req, res) => {
+    const [[c]] = await db.query('SELECT is_active FROM categories WHERE id = ?', [req.params.id]);
+    if (!c) return res.json({ ok: false, error: 'Category not found.' });
+    await db.query('UPDATE categories SET is_active = ? WHERE id = ?', [c.is_active ? 0 : 1, req.params.id]);
+    res.json({ ok: true, is_active: !c.is_active });
+});
+
 // GET /admin/tags — every distinct tag in use, for the Add/Edit Product
 // autocomplete suggestions.
 router.get('/tags', async (req, res) => {

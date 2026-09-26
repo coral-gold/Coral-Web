@@ -12,9 +12,10 @@ const NEW_PARENT = '__new__';
 // AND again as its own row in a separate flat table below, each with its
 // own Edit/Delete, which looked like duplicated entries (Batch 24 item 1).
 function CategoryNode({ node, depth, expanded, onToggle, editId, editName, setEditName,
-                         onStartEdit, onSaveEdit, onCancelEdit, onDelete, onUnmap }) {
+                         onStartEdit, onSaveEdit, onCancelEdit, onDelete, onUnmap, onToggleActive }) {
   const hasChildren = node.children && node.children.length > 0;
   const isEditing = editId === node.id;
+  const isActive = node.is_active !== 0 && node.is_active !== false;
 
   return (
     <>
@@ -23,6 +24,7 @@ function CategoryNode({ node, depth, expanded, onToggle, editId, editName, setEd
           display: 'flex', alignItems: 'center', gap: 10,
           padding: '8px 6px', paddingLeft: 6 + depth * 26,
           borderBottom: '1px solid var(--border)', flexWrap: 'wrap',
+          opacity: isActive ? 1 : .6,
         }}
       >
         {hasChildren ? (
@@ -46,6 +48,10 @@ function CategoryNode({ node, depth, expanded, onToggle, editId, editName, setEd
           <strong style={{ color: depth === 0 ? 'var(--primary)' : 'var(--near-black, #0f0f0f)' }}>{node.name}</strong>
         )}
 
+        <span className={`badge ${isActive ? 'badge-success' : 'badge-muted'}`}>
+          {isActive ? 'Active' : 'Disabled'}
+        </span>
+
         <span style={{ fontSize: 12, color: 'var(--mid)' }}>
           ({node.product_count} product{node.product_count === 1 ? '' : 's'})
         </span>
@@ -62,6 +68,9 @@ function CategoryNode({ node, depth, expanded, onToggle, editId, editName, setEd
               {node.parent_id && (
                 <button className="btn btn-sm btn-outline" onClick={() => onUnmap(node)}>Un-map</button>
               )}
+              <button className="btn btn-sm btn-outline" onClick={() => onToggleActive(node)}>
+                {isActive ? 'Disable' : 'Enable'}
+              </button>
               <button className="btn btn-sm btn-danger" onClick={() => onDelete(node)}>Delete</button>
             </>
           )}
@@ -74,7 +83,7 @@ function CategoryNode({ node, depth, expanded, onToggle, editId, editName, setEd
           expanded={expanded} onToggle={onToggle}
           editId={editId} editName={editName} setEditName={setEditName}
           onStartEdit={onStartEdit} onSaveEdit={onSaveEdit} onCancelEdit={onCancelEdit}
-          onDelete={onDelete} onUnmap={onUnmap}
+          onDelete={onDelete} onUnmap={onUnmap} onToggleActive={onToggleActive}
         />
       ))}
     </>
@@ -152,6 +161,16 @@ export default function Categories() {
     if (!confirm(`Un-map "${node.name}" from its Parent Category? It'll show under its own name again.`)) return;
     const d = await api.post(`/admin/categories/${node.id}/unmap`);
     if (d.ok) { loadTree(); show('Un-mapped'); }
+    else show(d.error || 'Failed', 'error');
+  }
+
+  // Pure visibility toggle (Batch 30 item 1) — nothing is deleted or
+  // un-mapped. Disabling a Parent Category hides every raw code mapped
+  // under it from the wholesaler/public catalog too; re-enabling restores
+  // everything immediately.
+  async function toggleActive(node) {
+    const d = await api.patch(`/admin/categories/${node.id}/toggle`);
+    if (d.ok) { loadTree(); show(d.is_active ? `"${node.name}" enabled` : `"${node.name}" disabled`); }
     else show(d.error || 'Failed', 'error');
   }
 
@@ -250,7 +269,7 @@ export default function Categories() {
                 expanded={expandedIds.has(node.id)} onToggle={toggleExpanded}
                 editId={editId} editName={editName} setEditName={setEditName}
                 onStartEdit={startEdit} onSaveEdit={saveEdit} onCancelEdit={cancelEdit}
-                onDelete={del} onUnmap={unmap}
+                onDelete={del} onUnmap={unmap} onToggleActive={toggleActive}
               />
             ))}
           </div>

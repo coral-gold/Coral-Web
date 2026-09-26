@@ -36,12 +36,20 @@ router.get('/preview', requireSiteUnlocked, async (req, res) => {
         // raw categories mapped to the same Parent Category (e.g. WTDC and
         // LRDC both → "Watch") must show as one section, never two, and
         // never under their raw code (Batch 23 item 6).
+        // A disabled category (or one mapped under a disabled parent) is
+        // excluded outright — Enable/Disable is a visibility toggle, not a
+        // delete, so re-enabling it brings the section straight back
+        // without needing to touch any product (Batch 30 item 1).
         const [catRows] = await db.query(
             `SELECT c.id, COALESCE(parentc.name, c.name) AS display_name
              FROM categories c
              LEFT JOIN categories parentc ON parentc.id = c.parent_id
              JOIN product_categories pc ON pc.category_id = c.id
-             JOIN products p ON p.id = pc.product_id AND p.active = 1`
+             JOIN products p ON p.id = pc.product_id AND p.active = 1
+             JOIN categories pcat ON pcat.id = p.category_id
+             LEFT JOIN categories pparent ON pparent.id = pcat.parent_id
+             WHERE c.is_active = 1 AND (parentc.id IS NULL OR parentc.is_active = 1)
+               AND pcat.is_active = 1 AND (pparent.id IS NULL OR pparent.is_active = 1)`
         );
         const idsByName = {};
         for (const r of catRows) (idsByName[r.display_name] ??= new Set()).add(r.id);
@@ -51,10 +59,19 @@ router.get('/preview', requireSiteUnlocked, async (req, res) => {
         for (const name of names) {
             const ids = [...idsByName[name]];
             const ph = ids.map(() => '?').join(',');
+            // Also requires the product's OWN (primary) category to be
+            // active — otherwise a product whose primary category is
+            // disabled could still surface here via an active *secondary*
+            // category association, contradicting the count above (which
+            // already excludes it) and the main catalogue list (Batch 30
+            // item 1's own consistency, not just this section's).
             const [rows] = await db.query(
                 `SELECT DISTINCT p.id, p.design_number, p.image_path, p.created_at FROM products p
                  JOIN product_categories pc ON pc.product_id = p.id
+                 JOIN categories pcat ON pcat.id = p.category_id
+                 LEFT JOIN categories pparent ON pparent.id = pcat.parent_id
                  WHERE pc.category_id IN (${ph}) AND p.active = 1
+                   AND pcat.is_active = 1 AND (pparent.id IS NULL OR pparent.is_active = 1)
                  ORDER BY p.created_at DESC LIMIT ?`,
                 [...ids, PREVIEW_PER_CATEGORY]
             );
@@ -85,10 +102,17 @@ const FEATURED_LIMIT = 8;
 
 router.get('/featured', requireSiteUnlocked, async (req, res) => {
     try {
+        // Excludes a featured product whose (primary) category, or that
+        // category's Parent Category, has been disabled — Batch 30 item 1:
+        // a disabled category hides its products everywhere customer-facing,
+        // Signature Items included, without un-featuring anything.
         const [rows] = await db.query(
-            `SELECT id, design_number, image_path, description FROM products
-             WHERE active = 1 AND is_featured = 1
-             ORDER BY created_at DESC LIMIT ?`,
+            `SELECT p.id, p.design_number, p.image_path, p.description FROM products p
+             JOIN categories c ON c.id = p.category_id
+             LEFT JOIN categories parentc ON parentc.id = c.parent_id
+             WHERE p.active = 1 AND p.is_featured = 1
+               AND c.is_active = 1 AND (parentc.id IS NULL OR parentc.is_active = 1)
+             ORDER BY p.created_at DESC LIMIT ?`,
             [FEATURED_LIMIT]
         );
         const extraByProduct = await galleryUrlsByProduct(rows.map(r => r.id));
@@ -123,7 +147,11 @@ router.get('/', requireParty, async (req, res) => {
     const netMin = req.query.netMin !== undefined && req.query.netMin !== '' ? parseFloat(req.query.netMin) : null;
     const netMax = req.query.netMax !== undefined && req.query.netMax !== '' ? parseFloat(req.query.netMax) : null;
 
-    const conds  = ['p.active = 1'];
+    // A disabled category (or one mapped under a disabled parent) hides its
+    // products here unconditionally — not just by leaving its name out of
+    // the filter chips, since a hand-built ?category= request could
+    // otherwise still reach them (Batch 30 item 1).
+    const conds  = ['p.active = 1', 'c.is_active = 1', '(parentc.id IS NULL OR parentc.is_active = 1)'];
     const params = [];
 
     if (categories.length) {
@@ -135,6 +163,7 @@ router.get('/', requireParty, async (req, res) => {
             JOIN categories c2 ON c2.id = pc.category_id
             LEFT JOIN categories parentc2 ON parentc2.id = c2.parent_id
             WHERE COALESCE(parentc2.name, c2.name) IN (${categories.map(() => '?').join(',')})
+              AND c2.is_active = 1 AND (parentc2.id IS NULL OR parentc2.is_active = 1)
         )`);
         params.push(...categories);
     }
@@ -154,7 +183,10 @@ router.get('/', requireParty, async (req, res) => {
 
     try {
         const [[{ total }]] = await db.query(
-            `SELECT COUNT(*) AS total FROM products p JOIN categories c ON c.id = p.category_id ${where}`,
+            `SELECT COUNT(*) AS total FROM products p
+             JOIN categories c ON c.id = p.category_id
+             LEFT JOIN categories parentc ON parentc.id = c.parent_id
+             ${where}`,
             params
         );
         const [rows] = await db.query(
@@ -181,7 +213,8 @@ router.get('/', requireParty, async (req, res) => {
                  FROM product_categories pc
                  JOIN categories c ON c.id = pc.category_id
                  LEFT JOIN categories parentc ON parentc.id = c.parent_id
-                 WHERE pc.product_id IN (${ph})`,
+                 WHERE pc.product_id IN (${ph})
+                   AND c.is_active = 1 AND (parentc.id IS NULL OR parentc.is_active = 1)`,
                 ids
             );
             const [tagRows] = await db.query(
@@ -228,13 +261,27 @@ router.get('/', requireParty, async (req, res) => {
 router.get('/categories', async (req, res) => {
     try {
         // Resolved to Parent Category name (item 6) — a customer never sees
-        // a raw ERP code like "WTDC", only "Watch".
+        // a raw ERP code like "WTDC", only "Watch". A disabled category (or
+        // one mapped under a disabled parent) is left out entirely — it's
+        // a pure visibility toggle, so re-enabling it brings it straight
+        // back with no other change needed (Batch 30 item 1). Also requires
+        // the product's OWN (primary) category to be active, not just the
+        // category this row is being counted under — otherwise a product
+        // whose primary category is disabled but that also carries an
+        // active *secondary* category association would still get counted
+        // here even though the main catalogue list (gated by the primary
+        // category alone) never actually shows it.
         const [rows] = await db.query(
             `SELECT COALESCE(parentc.name, c.name) AS name, COUNT(DISTINCT p.id) AS count
              FROM categories c
              LEFT JOIN categories parentc ON parentc.id = c.parent_id
              JOIN product_categories pc ON pc.category_id = c.id
-             JOIN products p ON p.id = pc.product_id WHERE p.active = 1
+             JOIN products p ON p.id = pc.product_id
+             JOIN categories pcat ON pcat.id = p.category_id
+             LEFT JOIN categories pparent ON pparent.id = pcat.parent_id
+             WHERE p.active = 1
+               AND c.is_active = 1 AND (parentc.id IS NULL OR parentc.is_active = 1)
+               AND pcat.is_active = 1 AND (pparent.id IS NULL OR pparent.is_active = 1)
              GROUP BY COALESCE(parentc.name, c.name) ORDER BY name`
         );
         res.json({ ok: true, categories: rows.map(r => ({ name: r.name, count: r.count })) });
