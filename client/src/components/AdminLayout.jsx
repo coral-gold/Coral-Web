@@ -20,6 +20,7 @@ const NAV = [
   { to: '/admin/quotations',  label: 'Quotations' },
   { to: '/admin/content',     label: 'Content' },
   { to: '/admin/media',       label: 'Media' },
+  { to: '/admin/faq',         label: 'FAQ' },
 ];
 
 function ChangePasswordModal({ onClose }) {

@@ -43,6 +43,7 @@ export default function WholesalerLayout({ children, wide }) {
           <nav>
             <Link to="/wholesaler/catalogue">Catalogue</Link>
             <Link to="/wholesaler/quotations">My Quotations</Link>
+            <Link to="/wholesaler/faq">FAQ</Link>
             <Link to="/wholesaler/quotation" className={`cart-badge ${cart.itemCount > 0 ? 'has-items' : ''}`}>
               🛒 <span>{cart.itemCount}</span>
             </Link>

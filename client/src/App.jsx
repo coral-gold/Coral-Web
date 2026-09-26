@@ -12,11 +12,13 @@ import Home          from './pages/public/Home';
 import About         from './pages/public/About';
 import Catalog       from './pages/public/Catalog';
 import Contact       from './pages/public/Contact';
+import PublicFAQ     from './pages/public/FAQ';
 
 import WholesalerLogin     from './pages/wholesaler/Login';
 import WholesalerCatalogue from './pages/wholesaler/Catalogue';
 import Quotation            from './pages/wholesaler/Quotation';
 import MyQuotations        from './pages/wholesaler/MyQuotations';
+import WholesalerFAQ       from './pages/wholesaler/FAQ';
 
 import AdminLogin    from './pages/admin/AdminLogin';
 import Dashboard     from './pages/admin/Dashboard';
@@ -28,6 +30,7 @@ import AdminQuotations from './pages/admin/Quotations';
 import Content       from './pages/admin/Content';
 import SettingsPage  from './pages/admin/Settings';
 import Media         from './pages/admin/Media';
+import AdminFAQ      from './pages/admin/FAQ';
 
 function PartyRoute({ children }) {
   const { party, loading } = useAuth();
@@ -54,11 +57,13 @@ export default function App() {
               <Route path="/about"   element={<SiteLockGate><About /></SiteLockGate>} />
               <Route path="/catalog" element={<SiteLockGate><Catalog /></SiteLockGate>} />
               <Route path="/contact" element={<SiteLockGate><Contact /></SiteLockGate>} />
+              <Route path="/faq"     element={<SiteLockGate><PublicFAQ /></SiteLockGate>} />
 
               <Route path="/wholesaler/login"     element={<WholesalerLogin />} />
               <Route path="/wholesaler/catalogue" element={<PartyRoute><WholesalerCatalogue /></PartyRoute>} />
               <Route path="/wholesaler/quotation" element={<PartyRoute><Quotation /></PartyRoute>} />
               <Route path="/wholesaler/quotations" element={<PartyRoute><MyQuotations /></PartyRoute>} />
+              <Route path="/wholesaler/faq"       element={<PartyRoute><WholesalerFAQ /></PartyRoute>} />
 
               <Route path="/admin"                element={<AdminLogin />} />
               <Route path="/admin/dashboard"      element={<AdminRoute><Dashboard /></AdminRoute>} />
@@ -70,6 +75,7 @@ export default function App() {
               <Route path="/admin/content"        element={<AdminRoute><Content /></AdminRoute>} />
               <Route path="/admin/settings"       element={<AdminRoute><SettingsPage /></AdminRoute>} />
               <Route path="/admin/media"          element={<AdminRoute><Media /></AdminRoute>} />
+              <Route path="/admin/faq"            element={<AdminRoute><AdminFAQ /></AdminRoute>} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

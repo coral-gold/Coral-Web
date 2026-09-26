@@ -17,6 +17,7 @@ export default function PublicLayout({ children }) {
             <NavLink to="/about">About</NavLink>
             <NavLink to="/catalog">Catalogue</NavLink>
             <NavLink to="/contact">Contact</NavLink>
+            <NavLink to="/faq">FAQ</NavLink>
             {settings.wholesalerEnabled && (
               <Link to="/wholesaler/login" className="btn-login">Wholesaler Login</Link>
             )}

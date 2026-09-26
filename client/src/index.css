@@ -815,3 +815,26 @@ select.form-control:disabled, select.form-control-sm:disabled {
 .lightbox-add-btn.in-cart { background: #fff; color: var(--primary); }
 .lightbox-add-btn.in-cart:hover { background: var(--pink-pale); }
 .lightbox-add-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+/* FAQ accordion (Batch 31) — shared by the Public, Wholesaler and Admin FAQ
+   pages, each supplying its own {q, a} list. */
+.faq-accordion { display: flex; flex-direction: column; gap: 12px; }
+.faq-item {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; transition: border-color .15s;
+}
+.faq-item.open { border-color: var(--secondary); }
+.faq-question {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 20px; background: none; border: none; text-align: left; cursor: pointer;
+  font-family: inherit; font-size: 15px; font-weight: 600; color: var(--near-black);
+}
+.faq-question:hover { color: var(--primary); }
+.faq-chevron {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--pink-pale);
+  color: var(--primary); display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; line-height: 1;
+}
+.faq-answer {
+  padding: 0 20px 18px; font-size: 14px; line-height: 1.7; color: var(--mid); white-space: pre-line;
+}
