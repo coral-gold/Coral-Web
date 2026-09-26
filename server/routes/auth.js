@@ -18,7 +18,7 @@ function dbErrorMessage(e) {
     if (db.isConfigured()) return 'Server error. Please try again shortly.';
     const m = e.message || '';
     if (m.startsWith('Database not configured'))
-        return 'Database not configured. Please visit /setup to complete setup.';
+        return 'Database not configured. Set DB_HOST/DB_USER/DB_PASS/DB_NAME in the environment.';
     if (e.code === 'ECONNREFUSED')
         return `DB connection refused (${e.address || 'host'}). Check DB_HOST / DB_PORT.`;
     if (e.code === 'ER_ACCESS_DENIED_ERROR' || e.code === 'ER_DBACCESS_DENIED_ERROR')
@@ -26,7 +26,7 @@ function dbErrorMessage(e) {
     if (e.code === 'ER_BAD_DB_ERROR')
         return `Database "${e.sqlMessage?.match(/'([^']+)'/)?.[1] || 'unknown'}" does not exist. Check DB_NAME — Hostinger database names are lowercase.`;
     if (e.code === 'ER_NO_SUCH_TABLE')
-        return 'Database tables not found. Visit /setup to initialise the schema.';
+        return 'Database tables not found. Restart the server to recreate the schema.';
     return `Server error: ${m}`;
 }
 
@@ -129,9 +129,9 @@ router.post('/admin/logout', (req, res) => {
     req.session.destroy(() => res.json({ ok: true }));
 });
 
-// Self-service password change — the only way to change the admin password
-// today is re-running the /setup DB wizard, which is a poor fit for routine
-// credential rotation.
+// Self-service password change — the admin account itself is bootstrapped
+// from ADMIN_USERNAME/ADMIN_PASSWORD once, at first startup (Batch 29 item
+// 1); this is how the password actually gets changed day to day afterward.
 router.post('/admin/change-password', async (req, res) => {
     if (!req.session.adminId) return res.status(401).json({ ok: false, error: 'Not logged in.' });
     const { currentPassword, newPassword } = req.body;

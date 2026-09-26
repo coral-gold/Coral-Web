@@ -39,9 +39,7 @@ export default function AdminLogin() {
               {error}
               {(error.includes('not configured') || error.includes('Server error') || error.includes('connection')) && (
                 <div style={{ marginTop: 8, fontSize: 13 }}>
-                  → <a href="/setup" style={{ color: 'inherit', fontWeight: 600 }}>Run Setup Wizard</a>
-                  &nbsp;·&nbsp;
-                  <a href="/api/health" target="_blank" rel="noreferrer" style={{ color: 'inherit', fontWeight: 600 }}>View Diagnostics</a>
+                  → <a href="/api/health" target="_blank" rel="noreferrer" style={{ color: 'inherit', fontWeight: 600 }}>View Diagnostics</a>
                 </div>
               )}
             </div>

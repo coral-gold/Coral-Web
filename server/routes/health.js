@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
             db_connect:    false,
             schema_ok:     false,
             admin_exists:  false,
-            error: 'No database config found. Set DB_HOST/DB_USER/DB_PASS/DB_NAME env vars, or visit /setup.',
+            error: 'No database config found. Set DB_HOST/DB_USER/DB_PASS/DB_NAME env vars.',
         });
     }
 

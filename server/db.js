@@ -62,12 +62,12 @@ if (_startCfg) createPool(_startCfg);
 module.exports = {
     query(...args) {
         const p = getPool();
-        if (!p) throw new Error('Database not configured. Please visit /setup to configure the database.');
+        if (!p) throw new Error('Database not configured. Set DB_HOST/DB_USER/DB_PASS/DB_NAME in the environment.');
         return p.query(...args);
     },
     getConnection(...args) {
         const p = getPool();
-        if (!p) throw new Error('Database not configured.');
+        if (!p) throw new Error('Database not configured. Set DB_HOST/DB_USER/DB_PASS/DB_NAME in the environment.');
         return p.getConnection(...args);
     },
     reinit(cfg) {
@@ -75,4 +75,8 @@ module.exports = {
         return createPool(cfg);
     },
     isConfigured() { return !!getPool(); },
+    // The resolved {host,user,password,database} — used by schemaInit.js to
+    // open its own one-off connection (with multipleStatements enabled just
+    // for that) without duplicating this file's env-var/config.json logic.
+    getRawConfig: buildPoolConfig,
 };

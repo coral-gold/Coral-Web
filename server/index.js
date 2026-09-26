@@ -91,7 +91,6 @@ if (mediaHostname && mediaHostname !== mainHostname) {
 
 // API routes
 app.use('/api/health',    require('./routes/health'));
-app.use('/api/setup',     require('./routes/setup'));
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/public',    require('./routes/public'));
 app.use('/api/catalogue', require('./routes/catalogue'));
@@ -139,12 +138,20 @@ app.listen(PORT, () => {
 
     const db = require('./db');
     if (!db.isConfigured()) {
-        console.warn('[DB] Not configured — visit /setup to initialise the database.');
+        console.warn('[DB] Not configured — set DB_HOST/DB_USER/DB_PASS/DB_NAME in the environment.');
         return;
     }
     db.query('SELECT 1').then(async () => {
         console.log('[DB] Connection OK');
+        // Replaces the removed Setup wizard (Batch 29 item 1): schema.sql's
+        // CREATE TABLE IF NOT EXISTS makes this safe on every startup, a
+        // fresh database gets its tables and an existing one is untouched.
+        await require('./lib/schemaInit').ensureSchema();
         await require('./migrations').runMigrations();
+        // Creates the first Admin account from ADMIN_USERNAME/
+        // ADMIN_PASSWORD if none exists yet — also replaces the wizard,
+        // which used to be the only way to create that first login.
+        await require('./lib/adminBootstrap').bootstrapAdmin();
     }).catch(e => {
         console.error('[DB] Connection FAILED:', e.message);
         if (e.code === 'ER_ACCESS_DENIED_ERROR' || e.code === 'ER_DBACCESS_DENIED_ERROR') {
@@ -153,8 +160,6 @@ app.listen(PORT, () => {
             console.error('[DB] Fix: check DB_HOST in .env — connection refused.');
         } else if (e.code === 'ER_BAD_DB_ERROR') {
             console.error('[DB] Fix: check DB_NAME in .env — database not found (use lowercase on Hostinger).');
-        } else if (e.code === 'ER_NO_SUCH_TABLE') {
-            console.error('[DB] Fix: visit /setup to initialise the schema.');
         }
     });
 });
